@@ -28,6 +28,7 @@ export default function TaxCenterScreen() {
   const { business, currentBranch, profile, fmt, currency } = useAuth();
   const router = useRouter();
   const isAdmin = profile?.role === 'admin';
+  const efrisEnabled = business?.is_efris_enabled ?? false;
 
   const [period, setPeriod] = useState<TaxPeriod>('month');
   const [loading, setLoading] = useState(false);
@@ -188,7 +189,9 @@ export default function TaxCenterScreen() {
         {/* Header */}
         <Text style={styles.heading}>🏛️ Tax Center</Text>
         <Text style={styles.subheading}>
-          Your tax compliance dashboard for URA — VAT, Income Tax, and EFRIS
+          {efrisEnabled
+            ? 'Your tax compliance dashboard for URA — VAT, Income Tax, and EFRIS'
+            : 'Your tax compliance dashboard — VAT and Income Tax'}
         </Text>
 
         {/* Period Selector */}
@@ -211,31 +214,33 @@ export default function TaxCenterScreen() {
         ) : (
           <>
             {/* === Compliance Health Check === */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>📋 Tax Compliance Health</Text>
-              <View style={[styles.scoreCard, {
-                backgroundColor: compliancePercent === 100 ? '#2d6a4f' : compliancePercent >= 50 ? '#E65100' : '#8B1A1A'
-              }]}>
-                <Text style={styles.scoreValue}>{compliancePercent}%</Text>
-                <Text style={styles.scoreLabel}>
-                  {compliancePercent === 100 ? 'Fully Compliant' : compliancePercent >= 50 ? 'Needs Attention' : 'Action Required'}
-                </Text>
-              </View>
-
-              {healthChecks.map((h, i) => (
-                <View key={i} style={styles.healthRow}>
-                  <FontAwesome
-                    name={h.ok ? 'check-circle' : 'times-circle'}
-                    size={18}
-                    color={h.ok ? '#4CAF50' : '#e94560'}
-                  />
-                  <View style={{ flex: 1, marginLeft: 10 }}>
-                    <Text style={styles.healthLabel}>{h.label}</Text>
-                    <Text style={[styles.healthDetail, !h.ok && { color: '#FF9800' }]}>{h.detail}</Text>
-                  </View>
+            {efrisEnabled && (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>📋 Tax Compliance Health</Text>
+                <View style={[styles.scoreCard, {
+                  backgroundColor: compliancePercent === 100 ? '#2d6a4f' : compliancePercent >= 50 ? '#E65100' : '#8B1A1A'
+                }]}>
+                  <Text style={styles.scoreValue}>{compliancePercent}%</Text>
+                  <Text style={styles.scoreLabel}>
+                    {compliancePercent === 100 ? 'Fully Compliant' : compliancePercent >= 50 ? 'Needs Attention' : 'Action Required'}
+                  </Text>
                 </View>
-              ))}
-            </View>
+
+                {healthChecks.map((h, i) => (
+                  <View key={i} style={styles.healthRow}>
+                    <FontAwesome
+                      name={h.ok ? 'check-circle' : 'times-circle'}
+                      size={18}
+                      color={h.ok ? '#4CAF50' : '#e94560'}
+                    />
+                    <View style={{ flex: 1, marginLeft: 10 }}>
+                      <Text style={styles.healthLabel}>{h.label}</Text>
+                      <Text style={[styles.healthDetail, !h.ok && { color: '#FF9800' }]}>{h.detail}</Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
 
             {/* === VAT Summary === */}
             <View style={styles.section}>
@@ -346,7 +351,7 @@ export default function TaxCenterScreen() {
                 <FontAwesome name="file-text" size={18} color="#fff" />
                 <View style={{ flex: 1, marginLeft: 12 }}>
                   <Text style={styles.actionTitle}>Export VAT Report</Text>
-                  <Text style={styles.actionDesc}>CSV with TINs, invoice numbers, credit note adjustments — ready for your accountant</Text>
+                  <Text style={styles.actionDesc}>CSV with {efrisEnabled ? 'TINs, ' : ''}invoice numbers, credit note adjustments — ready for your accountant</Text>
                 </View>
                 <FontAwesome name="chevron-right" size={14} color="#aaa" />
               </TouchableOpacity>
@@ -435,8 +440,8 @@ export default function TaxCenterScreen() {
               <FontAwesome name="lightbulb-o" size={16} color="#FFD700" />
               <Text style={styles.tipText}>
                 <Text style={{ fontWeight: 'bold' }}>Tip:</Text> Export your VAT and Income Tax reports regularly. 
-                Share them with your accountant via WhatsApp or Email to stay on top of your URA obligations.
-                EFRIS integration (Pro plan) automatically submits invoices to URA in real-time.
+                Share them with your accountant via WhatsApp or Email to stay on top of your tax obligations.
+                {efrisEnabled ? ' EFRIS integration (Pro plan) automatically submits invoices to URA in real-time.' : ''}
               </Text>
             </View>
           </>

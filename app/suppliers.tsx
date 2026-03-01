@@ -143,7 +143,7 @@ export default function SuppliersScreen() {
             <View style={styles.cardHeader}>
               <View style={styles.cardInfo}>
                 <Text style={styles.cardName}>{item.name}</Text>
-                {item.tin ? <Text style={styles.cardSub}>TIN: {item.tin}</Text> : null}
+                {business?.is_efris_enabled && item.tin ? <Text style={styles.cardSub}>TIN: {item.tin}</Text> : null}
                 {item.phone ? <Text style={styles.cardSub}>📱 {item.phone}</Text> : null}
                 {item.contact_person ? <Text style={styles.cardSub}>👤 {item.contact_person}</Text> : null}
               </View>
@@ -172,8 +172,12 @@ export default function SuppliersScreen() {
               <Text style={styles.label}>Name *</Text>
               <TextInput style={styles.input} placeholder="Supplier / Company name" placeholderTextColor="#555" value={name} onChangeText={setName} />
 
-              <Text style={styles.label}>TIN (Tax ID)</Text>
-              <TextInput style={styles.input} placeholder="e.g. 1000000001" placeholderTextColor="#555" value={tin} onChangeText={setTin} keyboardType="numeric" />
+              {business?.is_efris_enabled && (
+                <>
+                  <Text style={styles.label}>TIN (Tax ID)</Text>
+                  <TextInput style={styles.input} placeholder="e.g. 1000000001" placeholderTextColor="#555" value={tin} onChangeText={setTin} keyboardType="numeric" />
+                </>
+              )}
 
               <Text style={styles.label}>Phone</Text>
               <TextInput style={styles.input} placeholder="+256..." placeholderTextColor="#555" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />

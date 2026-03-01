@@ -17,6 +17,7 @@ type Category = { id: string; name: string; ura_product_code: string | null };
 
 export default function CategoriesScreen() {
   const { business } = useAuth();
+  const efrisEnabled = business?.is_efris_enabled ?? false;
   const [categories, setCategories] = useState<Category[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState('');
@@ -71,7 +72,7 @@ export default function CategoriesScreen() {
           <View style={styles.card}>
             <View style={styles.cardInfo}>
               <Text style={styles.cardName}>{item.name}</Text>
-              {item.ura_product_code && (
+              {efrisEnabled && item.ura_product_code && (
                 <Text style={styles.cardSub}>URA Code: {item.ura_product_code}</Text>
               )}
             </View>
@@ -85,7 +86,9 @@ export default function CategoriesScreen() {
             <View style={styles.formCard}>
               <Text style={styles.formTitle}>New Category</Text>
               <TextInput style={styles.input} placeholder="Category name *" placeholderTextColor="#555" value={name} onChangeText={setName} />
-              <TextInput style={styles.input} placeholder="URA Product Code (for EFRIS)" placeholderTextColor="#555" value={uraCode} onChangeText={setUraCode} />
+              {efrisEnabled && (
+                <TextInput style={styles.input} placeholder="URA Product Code (for EFRIS)" placeholderTextColor="#555" value={uraCode} onChangeText={setUraCode} />
+              )}
               <View style={styles.formButtons}>
                 <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowForm(false)}>
                   <Text style={styles.cancelText}>Cancel</Text>

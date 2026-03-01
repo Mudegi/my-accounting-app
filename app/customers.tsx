@@ -36,6 +36,7 @@ type Customer = {
 
 export default function CustomersScreen() {
   const { business } = useAuth();
+  const efrisEnabled = business?.is_efris_enabled ?? false;
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -82,7 +83,7 @@ export default function CustomersScreen() {
 
   const handleSave = async () => {
     if (!name.trim()) { Alert.alert('Error', 'Customer name is required'); return; }
-    if (buyerType === '0' && !tin.trim()) { Alert.alert('Error', 'TIN is required for B2B customers'); return; }
+    if (efrisEnabled && buyerType === '0' && !tin.trim()) { Alert.alert('Error', 'TIN is required for B2B customers'); return; }
     if (!business) return;
     setSaving(true);
 
@@ -158,10 +159,12 @@ export default function CustomersScreen() {
             <View style={styles.cardHeader}>
               <View style={styles.cardInfo}>
                 <Text style={styles.cardName}>{item.name}</Text>
-                <View style={[styles.buyerBadge, item.buyer_type === '0' ? styles.badgeB2B : item.buyer_type === '3' ? styles.badgeB2G : item.buyer_type === '2' ? styles.badgeForeign : styles.badgeB2C]}>
-                  <Text style={styles.buyerBadgeText}>{getBuyerLabel(item.buyer_type)}</Text>
-                </View>
-                {item.tin ? <Text style={styles.cardSub}>TIN: {item.tin}</Text> : null}
+                {efrisEnabled && (
+                  <View style={[styles.buyerBadge, item.buyer_type === '0' ? styles.badgeB2B : item.buyer_type === '3' ? styles.badgeB2G : item.buyer_type === '2' ? styles.badgeForeign : styles.badgeB2C]}>
+                    <Text style={styles.buyerBadgeText}>{getBuyerLabel(item.buyer_type)}</Text>
+                  </View>
+                )}
+                {efrisEnabled && item.tin ? <Text style={styles.cardSub}>TIN: {item.tin}</Text> : null}
                 {item.phone ? <Text style={styles.cardSub}>📱 {item.phone}</Text> : null}
               </View>
               <TouchableOpacity onPress={() => handleDelete(item)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
@@ -186,23 +189,27 @@ export default function CustomersScreen() {
             <ScrollView>
               <Text style={styles.formTitle}>{editingId ? 'Edit Customer' : 'New Customer'}</Text>
 
-              <Text style={styles.label}>Buyer Type</Text>
-              <View style={styles.chipRow}>
-                {BUYER_TYPES.map((bt) => (
-                  <TouchableOpacity
-                    key={bt.code}
-                    style={[styles.chip, buyerType === bt.code && styles.chipActive]}
-                    onPress={() => setBuyerType(bt.code)}
-                  >
-                    <Text style={[styles.chipText, buyerType === bt.code && { color: '#fff' }]}>{bt.label}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
+              {efrisEnabled && (
+                <>
+                  <Text style={styles.label}>Buyer Type</Text>
+                  <View style={styles.chipRow}>
+                    {BUYER_TYPES.map((bt) => (
+                      <TouchableOpacity
+                        key={bt.code}
+                        style={[styles.chip, buyerType === bt.code && styles.chipActive]}
+                        onPress={() => setBuyerType(bt.code)}
+                      >
+                        <Text style={[styles.chipText, buyerType === bt.code && { color: '#fff' }]}>{bt.label}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </>
+              )}
 
               <Text style={styles.label}>Name *</Text>
               <TextInput style={styles.input} placeholder="Customer / Company name" placeholderTextColor="#555" value={name} onChangeText={setName} />
 
-              {(buyerType === '0' || buyerType === '3') && (
+              {efrisEnabled && (buyerType === '0' || buyerType === '3') && (
                 <>
                   <Text style={styles.label}>TIN (Tax ID) *</Text>
                   <TextInput style={styles.input} placeholder="e.g. 1000000001" placeholderTextColor="#555" value={tin} onChangeText={setTin} keyboardType="numeric" />

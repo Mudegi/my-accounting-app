@@ -12,6 +12,7 @@ import {
 import { Text, View } from '@/components/Themed';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useRouter } from 'expo-router';
+import { useAuth } from '@/lib/auth';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -38,7 +39,7 @@ type ScreenGuide = {
 };
 
 /* ─── Guide Data ─── */
-const GUIDE_SECTIONS: GuideSection[] = [
+const getGuideSections = (efris: boolean): GuideSection[] => [
   /* ────────── GETTING STARTED ────────── */
   {
     id: 'getting-started',
@@ -67,13 +68,13 @@ const GUIDE_SECTIONS: GuideSection[] = [
         route: '/onboarding',
         description: 'Set up your business details, currency, and subscription plan during first-time setup.',
         steps: [
-          'Step 1: Enter your business name, phone number, address, and TIN (Tax Identification Number).',
+          'Step 1: Enter your business name, phone number, and address.',
           'Step 2: Select your business currency (default is UGX — Ugandan Shilling).',
-          'Step 3: Choose a subscription plan — Free Trial (14 days), Basic (70,000/mo), or Pro (220,000/mo with EFRIS).',
+          'Step 3: Choose a subscription plan — Free Trial (14 days), Basic (70,000/mo), or Pro (220,000/mo).',
           'Tap "Complete Setup" to finish. You\'ll be redirected to the main app.',
         ],
         tips: [
-          'You can change your TIN and business details later in Settings.',
+          'You can change your business details later in Settings.',
           'The 14-day free trial gives you full access to all features.',
         ],
       },
@@ -89,8 +90,8 @@ const GUIDE_SECTIONS: GuideSection[] = [
           'View your payment history at the bottom of the screen.',
         ],
         tips: [
-          'Basic plan is ideal for small shops not required to use EFRIS.',
-          'Pro plan includes EFRIS fiscal invoicing for URA compliance.',
+          efris ? 'Basic plan is ideal for small shops not required to use EFRIS.' : 'Basic plan is ideal for small shops.',
+          ...(efris ? ['Pro plan includes EFRIS fiscal invoicing for URA compliance.'] : []),
           'Your free trial gives full Pro features for 14 days.',
         ],
       },
@@ -126,25 +127,31 @@ const GUIDE_SECTIONS: GuideSection[] = [
         tips: [
           'Use "Clear Cart" (trash icon) to start a fresh sale.',
           'Credit sales automatically create a debt entry for the customer.',
-          'If EFRIS is enabled (Pro plan), the sale is automatically fiscalized with URA.',
-          'The receipt includes a QR code for EFRIS verification if fiscalized.',
+          ...(efris ? [
+            'If EFRIS is enabled (Pro plan), the sale is automatically fiscalized with URA.',
+            'The receipt includes a QR code for EFRIS verification if fiscalized.',
+          ] : []),
           'You can share or print the receipt from the Receipt screen.',
         ],
       },
       {
         title: 'Receipts',
         route: '/receipt',
-        description: 'View, print, or share fiscalized receipts with QR codes and URA-compliant tax breakdowns.',
+        description: efris
+          ? 'View, print, or share fiscalized receipts with QR codes and URA-compliant tax breakdowns.'
+          : 'View, print, or share receipts with tax breakdowns.',
         steps: [
           'After completing a sale, the receipt screen opens automatically.',
-          'The receipt shows: business name, invoice number, items, subtotal, tax breakdown by category (A–F), total, and EFRIS FDN.',
+          efris
+            ? 'The receipt shows: business name, invoice number, items, subtotal, tax breakdown by category (A–F), total, and EFRIS FDN.'
+            : 'The receipt shows: business name, invoice number, items, subtotal, tax breakdown, and total.',
           'Tap "Share" to send the receipt as a PDF.',
           'Tap "Print" to print the receipt (requires a connected printer).',
           'Tap "Done" to return to the Sell screen.',
         ],
         tips: [
           'Receipts are accessible later from Sales History → Sale Detail → View Receipt.',
-          'The QR code on the receipt links to URA\'s EFRIS verification portal.',
+          ...(efris ? ['The QR code on the receipt links to URA\'s EFRIS verification portal.'] : []),
         ],
       },
     ],
@@ -179,20 +186,26 @@ const GUIDE_SECTIONS: GuideSection[] = [
       {
         title: 'Adding / Editing Products',
         route: '/product/new',
-        description: 'Create or modify products with name, barcode, selling price, unit, tax category, and EFRIS registration.',
+        description: efris
+          ? 'Create or modify products with name, barcode, selling price, unit, tax category, and EFRIS registration.'
+          : 'Create or modify products with name, barcode, selling price, unit, and tax category.',
         steps: [
           'From Inventory, tap "+" to add a new product, or tap an existing product to edit.',
           'Enter product name (required), barcode, SKU, and description.',
           'Set the selling price and select the measurement unit (pieces, kg, litres, etc.).',
-          'Choose the EFRIS tax category: Standard (18%), Zero Rated, Exempt, or Excise Duty.',
-          'Set the EFRIS unit mapping for fiscal compliance.',
+          ...(efris ? [
+            'Choose the EFRIS tax category: Standard (18%), Zero Rated, Exempt, or Excise Duty.',
+            'Set the EFRIS unit mapping for fiscal compliance.',
+          ] : [
+            'Choose the tax category: Standard (18%), Zero Rated, Exempt, or Excise Duty.',
+          ]),
           'Optionally upload a product image.',
           'Tap "Save" to create or update the product.',
-          'For EFRIS-enabled businesses, tap "Register with EFRIS" to sync the product with URA.',
+          ...(efris ? ['For EFRIS-enabled businesses, tap "Register with EFRIS" to sync the product with URA.'] : []),
         ],
         tips: [
           'Scanning a barcode auto-fills the barcode field.',
-          'Products must be registered with EFRIS before they can appear on fiscalized invoices.',
+          ...(efris ? ['Products must be registered with EFRIS before they can appear on fiscalized invoices.'] : []),
           'The avg cost price is automatically calculated using AVCO (Average Cost) method when you make purchases.',
         ],
       },
@@ -202,12 +215,12 @@ const GUIDE_SECTIONS: GuideSection[] = [
         description: 'Record new stock purchases from suppliers. Increases inventory and creates accounting entries.',
         steps: [
           'From Dashboard, tap "Purchases" quick action, or navigate to Purchases screen.',
-          'Select a supplier from the dropdown, or enter a supplier TIN.',
+          efris ? 'Select a supplier from the dropdown, or enter a supplier TIN.' : 'Select a supplier from the dropdown.',
           'Tap "Add Item" to select products and enter quantity + cost price per unit.',
           'Choose the payment method (Cash, Mobile Money, Bank, Card).',
           'Tap "Submit Purchase" to save.',
           'Inventory quantities are automatically increased.',
-          'If EFRIS is enabled, the purchase is submitted as a "Stock Increase" to URA.',
+          ...(efris ? ['If EFRIS is enabled, the purchase is submitted as a "Stock Increase" to URA.'] : []),
           'A double-entry accounting journal entry is automatically posted.',
         ],
         tips: [
@@ -322,7 +335,9 @@ const GUIDE_SECTIONS: GuideSection[] = [
       {
         title: 'Credit Notes / Returns',
         route: '/credit-note',
-        description: 'Process customer returns by issuing credit notes against original fiscalized sales.',
+        description: efris
+          ? 'Process customer returns by issuing credit notes against original fiscalized sales.'
+          : 'Process customer returns by issuing credit notes against original sales.',
         steps: [
           'From Dashboard or Settings, navigate to "Credit Notes".',
           'Search for the original sale by invoice number or browse recent sales.',
@@ -330,11 +345,13 @@ const GUIDE_SECTIONS: GuideSection[] = [
           'Choose the items and quantities being returned.',
           'Select a return reason code (e.g., defective goods, wrong item, etc.).',
           'Tap "Submit Credit Note".',
-          'If EFRIS is enabled, the credit note is submitted to URA.',
+          ...(efris ? ['If EFRIS is enabled, the credit note is submitted to URA.'] : []),
           'Accounting entries are automatically reversed (including VAT).',
         ],
         tips: [
-          'Credit notes can only be issued against completed, fiscalized sales.',
+          efris
+            ? 'Credit notes can only be issued against completed, fiscalized sales.'
+            : 'Credit notes can only be issued against completed sales.',
           'The VAT on returned items is automatically reversed in your VAT books.',
           'Returned inventory is added back to stock.',
         ],
@@ -401,7 +418,9 @@ const GUIDE_SECTIONS: GuideSection[] = [
           'Filter by period: Today, 7 Days, Month, 3 Months, or All.',
           'Filter by payment method: Cash, MoMo, Card, or Credit.',
           'Search by customer name or invoice number.',
-          'Tap any sale to view full details (items, tax breakdown, EFRIS status).',
+          efris
+            ? 'Tap any sale to view full details (items, tax breakdown, EFRIS status).'
+            : 'Tap any sale to view full details (items, tax breakdown, status).',
           'From sale detail, tap "View Receipt" to see or share the receipt.',
         ],
         tips: [
@@ -413,16 +432,18 @@ const GUIDE_SECTIONS: GuideSection[] = [
       {
         title: 'Purchase History',
         route: '/purchase-history',
-        description: 'View past stock purchases with supplier info, amounts, and EFRIS submission status.',
+        description: efris
+          ? 'View past stock purchases with supplier info, amounts, and EFRIS submission status.'
+          : 'View past stock purchases with supplier info and amounts.',
         steps: [
           'From Dashboard, tap "Purchase History" quick action.',
           'Browse purchases sorted by date (newest first).',
           'Filter by period: Today, 7 Days, Month, 3 Months, or All.',
-          'Search by supplier name or TIN.',
+          efris ? 'Search by supplier name or TIN.' : 'Search by supplier name.',
           'Tap any purchase to view the full breakdown (items, quantities, costs).',
         ],
         tips: [
-          'EFRIS-submitted purchases show a green checkmark.',
+          ...(efris ? ['EFRIS-submitted purchases show a green checkmark.'] : []),
           'Use purchase history to verify what stock was received and at what cost.',
         ],
       },
@@ -449,9 +470,9 @@ const GUIDE_SECTIONS: GuideSection[] = [
   },
 
   /* ────────── TAX & COMPLIANCE ────────── */
-  {
+  ...(efris ? [{
     id: 'tax',
-    icon: 'university',
+    icon: 'university' as const,
     color: '#FF5722',
     title: 'Tax & URA Compliance',
     subtitle: 'EFRIS, VAT returns, income tax, and tax center',
@@ -516,7 +537,7 @@ const GUIDE_SECTIONS: GuideSection[] = [
         ],
       },
     ],
-  },
+  }] : []),
 
   /* ────────── PEOPLE ────────── */
   {
@@ -529,35 +550,43 @@ const GUIDE_SECTIONS: GuideSection[] = [
       {
         title: 'Managing Customers',
         route: '/customers',
-        description: 'Maintain a customer directory with URA buyer types for EFRIS compliance.',
+        description: efris
+          ? 'Maintain a customer directory with URA buyer types for EFRIS compliance.'
+          : 'Maintain a customer directory for invoicing and debt tracking.',
         steps: [
           'From Dashboard, tap "Customers" quick action.',
           'Tap "Add Customer" to create a new record.',
-          'Enter: name (required), TIN, phone, email, address, and contact person.',
-          'Select the EFRIS buyer type: B2B (Business), B2C (Consumer), Foreigner, or B2G (Government).',
+          efris
+            ? 'Enter: name (required), TIN, phone, email, address, and contact person.'
+            : 'Enter: name (required), phone, email, address, and contact person.',
+          ...(efris ? ['Select the EFRIS buyer type: B2B (Business), B2C (Consumer), Foreigner, or B2G (Government).'] : []),
           'Tap "Save" to create the customer.',
           'Search and browse existing customers in the list.',
           'Tap any customer to edit their details.',
         ],
         tips: [
-          'B2B customers must have a TIN for EFRIS invoicing.',
+          ...(efris ? ['B2B customers must have a TIN for EFRIS invoicing.'] : []),
           'Linking customers to sales enables debt tracking and loyalty points.',
-          'Customer TINs appear on exported VAT reports for URA filing.',
+          ...(efris ? ['Customer TINs appear on exported VAT reports for URA filing.'] : []),
         ],
       },
       {
         title: 'Managing Suppliers',
         route: '/suppliers',
-        description: 'Maintain a supplier directory for purchase records and EFRIS stock-in submissions.',
+        description: efris
+          ? 'Maintain a supplier directory for purchase records and EFRIS stock-in submissions.'
+          : 'Maintain a supplier directory for purchase records.',
         steps: [
           'From Dashboard, tap "Suppliers" quick action.',
           'Tap "Add Supplier" to create a new record.',
-          'Enter: name (required), TIN, phone, email, address, and contact person.',
+          efris
+            ? 'Enter: name (required), TIN, phone, email, address, and contact person.'
+            : 'Enter: name (required), phone, email, address, and contact person.',
           'Tap "Save" to create the supplier.',
           'Suppliers appear in the dropdown when recording purchases.',
         ],
         tips: [
-          'Supplier TINs are required for EFRIS purchase submissions.',
+          ...(efris ? ['Supplier TINs are required for EFRIS purchase submissions.'] : []),
           'Having suppliers set up in advance makes purchase recording faster.',
         ],
       },
@@ -613,19 +642,19 @@ const GUIDE_SECTIONS: GuideSection[] = [
       {
         title: 'App Settings',
         route: '/(tabs)/settings',
-        description: 'Central hub for profile, subscription, branches, EFRIS config, app mode, and more.',
+        description: 'Central hub for profile, subscription, branches, app config, and more.',
         steps: [
           'Go to the "Settings" tab (cog icon).',
           'Profile Card: View your name, role, and business.',
           'Subscription: See your current plan status and days remaining.',
           'Branch Selector: Switch between branches (if your business has multiple).',
           'App Mode: Toggle between Basic and Pro mode.',
-          'EFRIS Section: Configure API key, test connection, toggle test mode.',
+          ...(efris ? ['EFRIS Section: Configure API key, test connection, toggle test mode.'] : []),
           'Admin Links: Manage branches, users, and categories.',
         ],
         tips: [
           'Switch branches to view different branch data across the app.',
-          'Pro mode enables EFRIS fiscal invoicing — requires a Pro subscription.',
+          ...(efris ? ['Pro mode enables EFRIS fiscal invoicing — requires a Pro subscription.'] : []),
           'Use "Reload Profile" if your role or branch assignment was recently changed.',
         ],
       },
@@ -638,7 +667,7 @@ const GUIDE_SECTIONS: GuideSection[] = [
           'View all existing branches with their locations and phone numbers.',
           'Tap "Add Branch" to create a new location.',
           'Enter: branch name (required), location, and phone.',
-          'Toggle "EFRIS Enabled" if this branch should fiscalize invoices.',
+          ...(efris ? ['Toggle "EFRIS Enabled" if this branch should fiscalize invoices.'] : []),
           'Tap "Save" to create the branch.',
         ],
         tips: [
@@ -651,18 +680,22 @@ const GUIDE_SECTIONS: GuideSection[] = [
       {
         title: 'Product Categories',
         route: '/admin/categories',
-        description: 'Organize products into categories with optional URA product codes for EFRIS.',
+        description: efris
+          ? 'Organize products into categories with optional URA product codes for EFRIS.'
+          : 'Organize products into categories for easy browsing and filtering.',
         steps: [
           'Go to Settings → tap "Product Categories".',
           'View existing categories.',
           'Tap "Add Category" to create a new one.',
-          'Enter the category name and optionally a URA product code.',
+          efris ? 'Enter the category name and optionally a URA product code.' : 'Enter the category name.',
           'Tap "Save" to create the category.',
         ],
         tips: [
           'Categories help you organize and filter products.',
-          'URA product codes are used in EFRIS for product classification.',
-          'Common URA codes can be found on the URA e-Tax portal.',
+          ...(efris ? [
+            'URA product codes are used in EFRIS for product classification.',
+            'Common URA codes can be found on the URA e-Tax portal.',
+          ] : []),
         ],
         adminOnly: true,
       },
@@ -671,14 +704,16 @@ const GUIDE_SECTIONS: GuideSection[] = [
 ];
 
 /* ─── FAQ Data ─── */
-const FAQS: { q: string; a: string }[] = [
-  {
+const getFaqs = (efris: boolean): { q: string; a: string }[] => [
+  ...(efris ? [{
     q: 'What is EFRIS and do I need it?',
     a: 'EFRIS (Electronic Fiscal Receipting and Invoicing System) is URA\'s system for tracking business transactions. If your business is VAT-registered, you are legally required to use EFRIS. YourBooks Lite integrates with EFRIS on the Pro plan — every sale is automatically fiscalized with URA.',
-  },
+  }] : []),
   {
     q: 'How do I file my VAT return with URA?',
-    a: 'Go to Export → select "VAT" → choose the month → tap Export. The CSV shows your Output VAT, Input VAT, Credit Note adjustments, and Net VAT Payable. Use these figures on the URA web portal (efris.ura.go.ug) to complete your monthly return.',
+    a: efris
+      ? 'Go to Export → select "VAT" → choose the month → tap Export. The CSV shows your Output VAT, Input VAT, Credit Note adjustments, and Net VAT Payable. Use these figures on the URA web portal (efris.ura.go.ug) to complete your monthly return.'
+      : 'Go to Export → select "VAT" → choose the month → tap Export. The CSV shows your Output VAT, Input VAT, Credit Note adjustments, and Net VAT Payable. Use these figures to complete your monthly return.',
   },
   {
     q: 'What happens when I sell on credit?',
@@ -694,11 +729,15 @@ const FAQS: { q: string; a: string }[] = [
   },
   {
     q: 'What is the difference between Basic and Pro mode?',
-    a: 'Basic mode (70,000/mo) is for businesses that don\'t need EFRIS — you get full POS, inventory, accounting, and reporting features. Pro mode (220,000/mo) adds EFRIS fiscal invoicing, meaning every sale is registered with URA for tax compliance.',
+    a: efris
+      ? 'Basic mode (70,000/mo) is for businesses that don\'t need EFRIS — you get full POS, inventory, accounting, and reporting features. Pro mode (220,000/mo) adds EFRIS fiscal invoicing, meaning every sale is registered with URA for tax compliance.'
+      : 'Basic mode (70,000/mo) gives you full POS, inventory, accounting, and reporting features. Pro mode (220,000/mo) adds advanced features like fiscal invoicing and enhanced compliance tools.',
   },
   {
     q: 'How do I handle product returns?',
-    a: 'Go to Credit Notes (from Dashboard or Settings). Search for the original sale, select items to return, choose a reason code, and submit. The return reverses the sale, refunds VAT, adds returned items back to inventory, and submits a credit note to EFRIS if applicable.',
+    a: efris
+      ? 'Go to Credit Notes (from Dashboard or Settings). Search for the original sale, select items to return, choose a reason code, and submit. The return reverses the sale, refunds VAT, adds returned items back to inventory, and submits a credit note to EFRIS if applicable.'
+      : 'Go to Credit Notes (from Dashboard or Settings). Search for the original sale, select items to return, choose a reason code, and submit. The return reverses the sale, refunds VAT, and adds returned items back to inventory.',
   },
   {
     q: 'Can I have multiple branches?',
@@ -717,6 +756,10 @@ const FAQS: { q: string; a: string }[] = [
 /* ─── Component ─── */
 export default function HelpScreen() {
   const router = useRouter();
+  const { business } = useAuth();
+  const efrisEnabled = business?.is_efris_enabled ?? false;
+  const guideSections = getGuideSections(efrisEnabled);
+  const faqs = getFaqs(efrisEnabled);
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
   const [expandedScreen, setExpandedScreen] = useState<string | null>(null);
   const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
@@ -774,7 +817,7 @@ export default function HelpScreen() {
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
         {activeTab === 'guide' ? (
           <>
-            {GUIDE_SECTIONS.map(section => (
+            {guideSections.map(section => (
               <View key={section.id} style={styles.sectionCard}>
                 {/* Section Header */}
                 <TouchableOpacity
@@ -885,7 +928,9 @@ export default function HelpScreen() {
               <View style={styles.refRow}><Text style={styles.refLabel}>Tax Options:</Text><Text style={styles.refValue}>No Tax, 18% VAT, Zero Rated, Exempt</Text></View>
               <View style={styles.refRow}><Text style={styles.refLabel}>User Roles:</Text><Text style={styles.refValue}>Admin, Branch Manager, Salesperson</Text></View>
               <View style={styles.refRow}><Text style={styles.refLabel}>Plans:</Text><Text style={styles.refValue}>Free Trial (14d), Basic (70K), Pro (220K)</Text></View>
-              <View style={styles.refRow}><Text style={styles.refLabel}>Buyer Types:</Text><Text style={styles.refValue}>B2B, B2C, Foreigner, B2G</Text></View>
+              {efrisEnabled && (
+                <View style={styles.refRow}><Text style={styles.refLabel}>Buyer Types:</Text><Text style={styles.refValue}>B2B, B2C, Foreigner, B2G</Text></View>
+              )}
               <View style={styles.refRow}><Text style={styles.refLabel}>VAT Filing:</Text><Text style={styles.refValue}>15th of each month</Text></View>
               <View style={styles.refRow}><Text style={styles.refLabel}>Cost Method:</Text><Text style={styles.refValue}>AVCO (Weighted Average Cost)</Text></View>
             </View>
@@ -900,7 +945,7 @@ export default function HelpScreen() {
               </Text>
             </View>
 
-            {FAQS.map((faq, i) => (
+            {faqs.map((faq, i) => (
               <View key={i} style={styles.faqCard}>
                 <TouchableOpacity
                   style={styles.faqHeader}

@@ -497,7 +497,7 @@ export default function ProductFormScreen() {
                 <Text style={[styles.chipText, isService && styles.chipTextActive]}>🔧 Service</Text>
               </TouchableOpacity>
             </View>
-            <Text style={styles.hint}>{isService ? 'Services use empty goodsTypeCode for EFRIS.' : 'Products use goodsTypeCode "101" for EFRIS.'}</Text>
+            <Text style={styles.hint}>{efrisEnabled ? (isService ? 'Services use empty goodsTypeCode for EFRIS.' : 'Products use goodsTypeCode "101" for EFRIS.') : (isService ? 'Service — no physical stock tracking.' : 'Physical product with stock tracking.')}</Text>
           </View>
 
           {/* Name */}
@@ -539,7 +539,7 @@ export default function ProductFormScreen() {
           {/* SKU / Commodity Code */}
           <View style={styles.field}>
             <Text style={styles.label}>SKU / Commodity Code</Text>
-            <Text style={styles.hint}>Product identifier. For EFRIS, use the 8-digit UNBS commodity code.</Text>
+            <Text style={styles.hint}>{efrisEnabled ? 'Product identifier. For EFRIS, use the 8-digit UNBS commodity code.' : 'Optional product identifier or code.'}</Text>
             <TextInput
               style={styles.input}
               placeholder="e.g. 84713000"

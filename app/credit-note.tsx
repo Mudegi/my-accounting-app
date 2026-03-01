@@ -86,12 +86,19 @@ export default function CreditNoteScreen() {
 
   const loadFiscalizedSales = async () => {
     if (!business || !currentBranch) return;
-    const { data } = await supabase
+    let query = supabase
       .from('sales')
       .select('id, invoice_number, total_amount, efris_fdn, created_at')
       .eq('business_id', business.id)
-      .eq('branch_id', currentBranch.id)
-      .eq('is_fiscalized', true)
+      .eq('branch_id', currentBranch.id);
+
+    if (efrisEnabled) {
+      query = query.eq('is_fiscalized', true);
+    } else {
+      query = query.eq('status', 'completed');
+    }
+
+    const { data } = await query
       .order('created_at', { ascending: false })
       .limit(30);
     if (data) setFiscalizedSales(data);
@@ -259,7 +266,7 @@ export default function CreditNoteScreen() {
           <View style={styles.saleInfo}>
             <Text style={styles.saleInfoText}>Invoice: {selectedSale.invoice_number || 'N/A'}</Text>
             <Text style={styles.saleInfoText}>Amount: {fmt(selectedSale.total_amount)}</Text>
-            <Text style={styles.saleInfoText}>FDN: {selectedSale.efris_fdn || 'N/A'}</Text>
+            {efrisEnabled && <Text style={styles.saleInfoText}>FDN: {selectedSale.efris_fdn || 'N/A'}</Text>}
           </View>
 
           <Text style={styles.label}>Reason</Text>
@@ -329,7 +336,7 @@ export default function CreditNoteScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select a Fiscalized Sale</Text>
+              <Text style={styles.modalTitle}>{efrisEnabled ? 'Select a Fiscalized Sale' : 'Select a Sale'}</Text>
               <TouchableOpacity onPress={() => { setShowSalePicker(false); setShowForm(false); }}>
                 <FontAwesome name="times" size={22} color="#fff" />
               </TouchableOpacity>
@@ -341,14 +348,16 @@ export default function CreditNoteScreen() {
                 <TouchableOpacity style={styles.saleRow} onPress={() => pickSale(item)}>
                   <View style={styles.saleRowInfo}>
                     <Text style={styles.saleRowInv}>{item.invoice_number || 'No invoice #'}</Text>
-                    <Text style={styles.saleRowDate}>{new Date(item.created_at).toLocaleDateString()} · FDN: {item.efris_fdn || 'N/A'}</Text>
+                    <Text style={styles.saleRowDate}>{new Date(item.created_at).toLocaleDateString()}{efrisEnabled ? ` · FDN: ${item.efris_fdn || 'N/A'}` : ''}</Text>
                   </View>
                   <Text style={styles.saleRowAmount}>{fmt(item.total_amount)}</Text>
                 </TouchableOpacity>
               )}
               ListEmptyComponent={
                 <Text style={{ color: '#666', textAlign: 'center', marginTop: 30 }}>
-                  No fiscalized sales found. Only EFRIS-fiscalized invoices can have credit notes.
+                  {efrisEnabled
+                    ? 'No fiscalized sales found. Only EFRIS-fiscalized invoices can have credit notes.'
+                    : 'No completed sales found.'}
                 </Text>
               }
             />

@@ -358,10 +358,12 @@ export default function DashboardScreen() {
                   <Text style={styles.actionLabel}>Reports</Text>
                 </TouchableOpacity>
               )}
-              <TouchableOpacity style={styles.actionCard} onPress={() => router.push('/tax-center' as any)}>
-                <FontAwesome name="university" size={22} color="#FF5722" />
-                <Text style={styles.actionLabel}>Tax Center</Text>
-              </TouchableOpacity>
+              {business?.is_efris_enabled && (
+                <TouchableOpacity style={styles.actionCard} onPress={() => router.push('/tax-center' as any)}>
+                  <FontAwesome name="university" size={22} color="#FF5722" />
+                  <Text style={styles.actionLabel}>Tax Center</Text>
+                </TouchableOpacity>
+              )}
               <TouchableOpacity style={styles.actionCard} onPress={() => router.push('/suppliers' as any)}>
                 <FontAwesome name="truck" size={22} color="#2196F3" />
                 <Text style={styles.actionLabel}>Suppliers</Text>

@@ -169,8 +169,12 @@ export default function OnboardingScreen() {
             <Text style={styles.label}>Address</Text>
             <TextInput style={styles.input} value={bizAddress} onChangeText={setBizAddress} placeholder="e.g. Plot 5, Luwum St, Kampala" placeholderTextColor="#555" />
 
-            <Text style={styles.label}>TIN (Tax ID - optional)</Text>
-            <TextInput style={styles.input} value={bizTin} onChangeText={setBizTin} placeholder="Tax Identification Number" placeholderTextColor="#555" />
+            {business?.is_efris_enabled && (
+              <>
+                <Text style={styles.label}>TIN (Tax ID - optional)</Text>
+                <TextInput style={styles.input} value={bizTin} onChangeText={setBizTin} placeholder="Tax Identification Number" placeholderTextColor="#555" />
+              </>
+            )}
 
             <TouchableOpacity style={styles.primaryButton} onPress={saveBusinessDetails} disabled={saving}>
               {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryButtonText}>Next →</Text>}
