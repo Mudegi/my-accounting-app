@@ -1,0 +1,323 @@
+import React, { useState, useCallback } from 'react';
+import {
+  StyleSheet,
+  TouchableOpacity,
+  FlatList,
+  RefreshControl,
+  TextInput,
+  Alert,
+  Image,
+} from 'react-native';
+import { Text, View } from '@/components/Themed';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/lib/auth';
+import FontAwesome from '@expo/vector-icons/FontAwesome';
+import { useFocusEffect, useRouter } from 'expo-router';
+
+type InventoryItem = {
+  id: string;
+  product_id: string;
+  name: string;
+  barcode: string | null;
+  image_url: string | null;
+  quantity: number;
+  selling_price: number;
+  avg_cost_price: number;
+  reorder_level: number;
+};
+
+export default function InventoryScreen() {
+  const { business, currentBranch, fmt } = useAuth();
+  const router = useRouter();
+  const [items, setItems] = useState<InventoryItem[]>([]);
+  const [filtered, setFiltered] = useState<InventoryItem[]>([]);
+  const [search, setSearch] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
+  const [activeFilter, setActiveFilter] = useState<'all' | 'low' | 'out'>('all');
+
+  const loadInventory = useCallback(async () => {
+    if (!business || !currentBranch) return;
+
+    const { data } = await supabase
+      .from('inventory')
+      .select(`
+        id,
+        quantity,
+        selling_price,
+        avg_cost_price,
+        reorder_level,
+        product_id,
+        products(id, name, barcode, image_url)
+      `)
+      .eq('branch_id', currentBranch.id)
+      .order('quantity', { ascending: true });
+
+    if (data) {
+      const mapped: InventoryItem[] = data.map((row: any) => ({
+        id: row.id,
+        product_id: row.product_id,
+        name: row.products?.name || 'Unknown',
+        barcode: row.products?.barcode || null,
+        image_url: row.products?.image_url || null,
+        quantity: row.quantity,
+        selling_price: row.selling_price,
+        avg_cost_price: row.avg_cost_price,
+        reorder_level: row.reorder_level,
+      }));
+      setItems(mapped);
+      setFiltered(mapped);
+      // Reset filter to 'all' on reload
+      setActiveFilter('all');
+    }
+  }, [business, currentBranch]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadInventory();
+    }, [loadInventory])
+  );
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadInventory();
+    setRefreshing(false);
+  };
+
+  const handleSearch = (text: string) => {
+    setSearch(text);
+    applyFilter(activeFilter, text);
+  };
+
+  const applyFilter = (filter: 'all' | 'low' | 'out', query?: string) => {
+    const q = query ?? search;
+    let base = items;
+    // Apply stock filter
+    if (filter === 'out') base = base.filter((i) => i.quantity === 0);
+    else if (filter === 'low') base = base.filter((i) => i.quantity > 0 && i.quantity <= i.reorder_level);
+    // Apply search filter
+    if (q) {
+      const lower = q.toLowerCase();
+      base = base.filter((i) =>
+        i.name.toLowerCase().includes(lower) ||
+        (i.barcode && i.barcode.includes(q))
+      );
+    }
+    setFiltered(base);
+  };
+
+  const toggleFilter = (filter: 'all' | 'low' | 'out') => {
+    const next = activeFilter === filter ? 'all' : filter;
+    setActiveFilter(next);
+    applyFilter(next);
+  };
+
+  const stockStatus = (item: InventoryItem) => {
+    if (item.quantity === 0) return { color: '#e94560', label: 'Out of Stock' };
+    if (item.quantity <= item.reorder_level) return { color: '#FF9800', label: 'Low Stock' };
+    return { color: '#4CAF50', label: 'In Stock' };
+  };
+
+  const lowStockCount = items.filter((i) => i.quantity <= i.reorder_level).length;
+  const outOfStockCount = items.filter((i) => i.quantity === 0).length;
+
+  return (
+    <View style={styles.container}>
+      {/* Summary Bar */}
+      <View style={styles.summaryBar}>
+        <TouchableOpacity
+          style={[styles.summaryItem, activeFilter === 'all' && styles.summaryItemActive]}
+          onPress={() => toggleFilter('all')}
+        >
+          <Text style={styles.summaryValue}>{items.length}</Text>
+          <Text style={styles.summaryLabel}>Products</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.summaryItem, { borderColor: '#FF9800' }, activeFilter === 'low' && { backgroundColor: '#FF980022' }]}
+          onPress={() => toggleFilter('low')}
+        >
+          <Text style={[styles.summaryValue, { color: '#FF9800' }]}>{lowStockCount}</Text>
+          <Text style={styles.summaryLabel}>Low Stock</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.summaryItem, { borderColor: '#e94560' }, activeFilter === 'out' && { backgroundColor: '#e9456022' }]}
+          onPress={() => toggleFilter('out')}
+        >
+          <Text style={[styles.summaryValue, { color: '#e94560' }]}>{outOfStockCount}</Text>
+          <Text style={styles.summaryLabel}>Out of Stock</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Search */}
+      <View style={styles.searchContainer}>
+        <FontAwesome name="search" size={16} color="#666" style={styles.searchIcon} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search by name or barcode..."
+          placeholderTextColor="#666"
+          value={search}
+          onChangeText={handleSearch}
+        />
+        {search.length > 0 && (
+          <TouchableOpacity onPress={() => handleSearch('')}>
+            <FontAwesome name="times-circle" size={16} color="#666" />
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Product List */}
+      <FlatList
+        data={filtered}
+        keyExtractor={(item) => item.id}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#e94560" />}
+        renderItem={({ item }) => {
+          const status = stockStatus(item);
+          return (
+            <TouchableOpacity
+              style={styles.productCard}
+              onPress={() => router.push({ pathname: '/product/[id]', params: { id: item.product_id } })}
+            >
+              <View style={styles.productLeft}>
+                {item.image_url ? (
+                  <Image source={{ uri: item.image_url }} style={styles.productThumb} />
+                ) : (
+                  <View style={[styles.stockIndicator, { backgroundColor: status.color }]} />
+                )}
+                <View style={styles.productInfo}>
+                  <Text style={styles.productName}>{item.name}</Text>
+                  {item.barcode && (
+                    <Text style={styles.productBarcode}>
+                      <FontAwesome name="barcode" size={11} color="#666" /> {item.barcode}
+                    </Text>
+                  )}
+                  <Text style={styles.productPrice}>
+                    Sell: {fmt(item.selling_price)} | Cost: {fmt(item.avg_cost_price)}
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.productRight}>
+                <View style={[styles.qtyBadge, { backgroundColor: status.color + '22', borderColor: status.color }]}>
+                  <Text style={[styles.qtyText, { color: status.color }]}>{item.quantity}</Text>
+                  <Text style={[styles.qtyLabel, { color: status.color }]}>units</Text>
+                </View>
+              </View>
+            </TouchableOpacity>
+          );
+        }}
+        ListEmptyComponent={
+          <View style={styles.emptyState}>
+            <FontAwesome name="cube" size={48} color="#333" />
+            <Text style={styles.emptyTitle}>No products yet</Text>
+            <Text style={styles.emptySubtitle}>Tap + to add your first product</Text>
+          </View>
+        }
+      />
+
+      {/* Add Product FAB */}
+      <TouchableOpacity
+        style={styles.fab}
+        onPress={() => router.push('/product/new')}
+      >
+        <FontAwesome name="plus" size={24} color="#fff" />
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#1a1a2e' },
+  summaryBar: {
+    flexDirection: 'row',
+    backgroundColor: '#16213e',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    gap: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#0f3460',
+  },
+  summaryItem: {
+    flex: 1,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#4CAF50',
+    borderRadius: 10,
+    paddingVertical: 8,
+    backgroundColor: 'transparent',
+  },
+  summaryValue: { fontSize: 20, fontWeight: 'bold', color: '#4CAF50' },
+  summaryLabel: { fontSize: 11, color: '#aaa', marginTop: 2 },
+  summaryItemActive: { backgroundColor: '#4CAF5022' },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#16213e',
+    margin: 12,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: '#0f3460',
+  },
+  searchIcon: { marginRight: 8 },
+  searchInput: {
+    flex: 1,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: '#fff',
+  },
+  productCard: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#16213e',
+    marginHorizontal: 12,
+    marginBottom: 8,
+    borderRadius: 12,
+    padding: 14,
+  },
+  productLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    backgroundColor: 'transparent',
+  },
+  stockIndicator: {
+    width: 4,
+    height: 48,
+    borderRadius: 2,
+    marginRight: 12,
+  },
+  productThumb: { width: 48, height: 48, borderRadius: 10, marginRight: 12 },
+  productInfo: { flex: 1, backgroundColor: 'transparent' },
+  productName: { fontSize: 16, fontWeight: 'bold', color: '#fff' },
+  productBarcode: { fontSize: 12, color: '#666', marginTop: 2 },
+  productPrice: { fontSize: 12, color: '#aaa', marginTop: 3 },
+  productRight: { alignItems: 'center', backgroundColor: 'transparent' },
+  qtyBadge: {
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    minWidth: 56,
+  },
+  qtyText: { fontSize: 20, fontWeight: 'bold' },
+  qtyLabel: { fontSize: 11, marginTop: -2 },
+  emptyState: {
+    alignItems: 'center',
+    paddingTop: 80,
+    backgroundColor: 'transparent',
+  },
+  emptyTitle: { color: '#555', fontSize: 18, fontWeight: 'bold', marginTop: 16 },
+  emptySubtitle: { color: '#444', fontSize: 14, marginTop: 6 },
+  fab: {
+    position: 'absolute',
+    bottom: 24,
+    right: 24,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#e94560',
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 6,
+  },
+});

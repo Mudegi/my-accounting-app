@@ -1,6 +1,7 @@
 /**
- * Learn more about Light and Dark modes:
- * https://docs.expo.io/guides/color-schemes/
+ * Themed components — always dark to match the app's design.
+ * View defaults to transparent (parent or navigation theme provides bg).
+ * Text defaults to white (#fff).
  */
 
 import { Text as DefaultText, View as DefaultView } from 'react-native';
@@ -20,7 +21,7 @@ export function useThemeColor(
   props: { light?: string; dark?: string },
   colorName: keyof typeof Colors.light & keyof typeof Colors.dark
 ) {
-  const theme = useColorScheme() ?? 'light';
+  const theme = useColorScheme() ?? 'dark';
   const colorFromProps = props[theme];
 
   if (colorFromProps) {
@@ -32,14 +33,12 @@ export function useThemeColor(
 
 export function Text(props: TextProps) {
   const { style, lightColor, darkColor, ...otherProps } = props;
-  const color = useThemeColor({ light: lightColor, dark: darkColor }, 'text');
-
-  return <DefaultText style={[{ color }, style]} {...otherProps} />;
+  // Always white text — individual styles can override
+  return <DefaultText style={[{ color: '#fff' }, style]} {...otherProps} />;
 }
 
 export function View(props: ViewProps) {
   const { style, lightColor, darkColor, ...otherProps } = props;
-  const backgroundColor = useThemeColor({ light: lightColor, dark: darkColor }, 'background');
-
-  return <DefaultView style={[{ backgroundColor }, style]} {...otherProps} />;
+  // Transparent by default — screens/cards set their own bg
+  return <DefaultView style={[{ backgroundColor: 'transparent' }, style]} {...otherProps} />;
 }
