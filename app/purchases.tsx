@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
 } from 'react-native';
 import { Text, View } from '@/components/Themed';
 import { supabase } from '@/lib/supabase';
@@ -48,6 +49,8 @@ export default function PurchasesScreen() {
   const [selectedSupplierId, setSelectedSupplierId] = useState<string | null>(null);
   const [purchasePayMethod, setPurchasePayMethod] = useState('cash');
   const [vatAmount, setVatAmount] = useState('');
+  const [productSearch, setProductSearch] = useState('');
+  const [showProductList, setShowProductList] = useState(false);
 
   const load = useCallback(async () => {
     if (!business || !currentBranch) return;
@@ -194,6 +197,7 @@ export default function PurchasesScreen() {
     setSelectedProduct(''); setQty(''); setCostPrice(''); setSupplier(''); setSupplierTin('');
     setSelectedSupplierId(null); setSupplierSearch('');
     setPurchasePayMethod('cash'); setVatAmount('');
+    setProductSearch(''); setShowProductList(false);
     load();
     setSaving(false);
   };
@@ -207,7 +211,7 @@ export default function PurchasesScreen() {
       </TouchableOpacity>
 
       {showForm && (
-        <View style={styles.formCard}>
+        <ScrollView style={styles.formCard} keyboardShouldPersistTaps="handled" nestedScrollEnabled>
           <Text style={styles.formTitle}>New Purchase</Text>
 
           <Text style={styles.label}>Supplier</Text>
@@ -246,13 +250,46 @@ export default function PurchasesScreen() {
           )}
 
           <Text style={styles.label}>Product</Text>
-          <View style={styles.chipGrid}>
-            {products.map((p) => (
-              <TouchableOpacity key={p.id} style={[styles.chip, selectedProduct === p.id && styles.chipActive]} onPress={() => setSelectedProduct(p.id)}>
-                <Text style={[styles.chipText, selectedProduct === p.id && styles.chipTextActive]}>{p.name}</Text>
+          {selectedProduct ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10, backgroundColor: 'transparent' }}>
+              <View style={{ flex: 1, backgroundColor: '#0f3460', borderRadius: 10, padding: 14 }}>
+                <Text style={{ color: '#fff', fontSize: 15 }}>{products.find(p => p.id === selectedProduct)?.name || 'Selected'}</Text>
+              </View>
+              <TouchableOpacity onPress={() => { setSelectedProduct(''); setProductSearch(''); }} style={{ padding: 10 }}>
+                <FontAwesome name="times" size={18} color="#e94560" />
               </TouchableOpacity>
-            ))}
-          </View>
+            </View>
+          ) : (
+            <View style={{ position: 'relative', zIndex: 10 }}>
+              <TextInput
+                style={styles.input}
+                placeholder="Search product..."
+                placeholderTextColor="#555"
+                value={productSearch}
+                onChangeText={(text) => { setProductSearch(text); setShowProductList(true); }}
+                onFocus={() => setShowProductList(true)}
+              />
+              {showProductList && (
+                <View style={styles.productDropdown}>
+                  {products
+                    .filter(p => p.name.toLowerCase().includes(productSearch.toLowerCase()))
+                    .slice(0, 8)
+                    .map(p => (
+                      <TouchableOpacity
+                        key={p.id}
+                        style={styles.productDropdownItem}
+                        onPress={() => { setSelectedProduct(p.id); setProductSearch(p.name); setShowProductList(false); }}
+                      >
+                        <Text style={{ color: '#fff', fontSize: 14 }}>{p.name}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  {products.filter(p => p.name.toLowerCase().includes(productSearch.toLowerCase())).length === 0 && (
+                    <Text style={{ color: '#666', padding: 12, textAlign: 'center' }}>No products found</Text>
+                  )}
+                </View>
+              )}
+            </View>
+          )}
 
           <TextInput style={styles.input} placeholder="Quantity Received" placeholderTextColor="#555" value={qty} onChangeText={setQty} keyboardType="numeric" />
           <TextInput style={styles.input} placeholder={`Cost Price per Unit (${currency.symbol})`} placeholderTextColor="#555" value={costPrice} onChangeText={setCostPrice} keyboardType="numeric" />
@@ -289,7 +326,7 @@ export default function PurchasesScreen() {
               </TouchableOpacity>
             )}
           </View>
-        </View>
+        </ScrollView>
       )}
 
       <FlatList
@@ -320,7 +357,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#1a1a2e', padding: 16 },
   addBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#e94560', borderRadius: 12, padding: 14, marginBottom: 14, gap: 8 },
   addBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 15 },
-  formCard: { backgroundColor: '#16213e', borderRadius: 16, padding: 16, marginBottom: 14 },
+  formCard: { backgroundColor: '#16213e', borderRadius: 16, padding: 16, marginBottom: 14 } as any,
   formTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold', marginBottom: 12 },
   label: { color: '#aaa', fontSize: 13, marginBottom: 6 },
   chipGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
@@ -329,6 +366,16 @@ const styles = StyleSheet.create({
   chipText: { color: '#aaa', fontSize: 13 },
   chipTextActive: { color: '#fff', fontWeight: 'bold' },
   input: { backgroundColor: '#0f3460', borderRadius: 10, padding: 14, color: '#fff', fontSize: 15, marginBottom: 10 },
+  productDropdown: {
+    position: 'absolute', top: 52, left: 0, right: 0, zIndex: 20,
+    backgroundColor: '#0f3460', borderRadius: 10, maxHeight: 220,
+    borderWidth: 1, borderColor: '#e94560',
+    elevation: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4, shadowRadius: 6,
+  },
+  productDropdownItem: {
+    padding: 12, borderBottomWidth: 1, borderBottomColor: '#1a1a2e',
+  },
   totalPreview: { color: '#4CAF50', fontWeight: 'bold', fontSize: 15, textAlign: 'center', marginBottom: 10 },
   formButtons: { flexDirection: 'row', gap: 10 },
   cancelBtn: { flex: 1, padding: 14, borderRadius: 10, backgroundColor: '#333', alignItems: 'center' },
