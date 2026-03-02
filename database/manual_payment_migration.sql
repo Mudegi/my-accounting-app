@@ -14,6 +14,8 @@ ALTER TABLE payments ADD COLUMN IF NOT EXISTS phone_number TEXT;
 -- ─── 2. UPDATE admin_list_businesses TO INCLUDE PENDING PAYMENT REASON ────
 -- Shows the most recent pending payment reason alongside each business
 
+DROP FUNCTION IF EXISTS admin_list_businesses();
+
 CREATE OR REPLACE FUNCTION admin_list_businesses()
 RETURNS TABLE (
   id uuid,
@@ -74,6 +76,8 @@ $$;
 
 
 -- ─── 3. UPDATE admin_list_payments TO INCLUDE REASON AND PHONE ────
+
+DROP FUNCTION IF EXISTS admin_list_payments(int, int);
 
 CREATE OR REPLACE FUNCTION admin_list_payments(
   p_limit int DEFAULT 50,
