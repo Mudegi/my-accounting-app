@@ -5,7 +5,7 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useState } from 'react';
 import 'react-native-reanimated';
-import { ActivityIndicator, TouchableOpacity, Modal, TextInput, StyleSheet, Alert } from 'react-native';
+import { ActivityIndicator, TouchableOpacity, Modal, TextInput, StyleSheet, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { View, Text } from '@/components/Themed';
 
 import { AuthProvider, useAuth } from '@/lib/auth';
@@ -288,6 +288,7 @@ function RootLayoutNav() {
 
       {/* First-login password change prompt for invited users */}
       <Modal visible={showPasswordPrompt} transparent animationType="fade">
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <View style={pwdStyles.overlay}>
           <View style={pwdStyles.card}>
             <Text style={pwdStyles.icon}>🔐</Text>
@@ -337,6 +338,7 @@ function RootLayoutNav() {
             </TouchableOpacity>
           </View>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
     </ThemeProvider>
   );

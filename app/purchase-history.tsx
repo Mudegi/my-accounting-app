@@ -5,6 +5,8 @@ import {
   FlatList,
   TextInput,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { Text, View } from '@/components/Themed';
 import { supabase } from '@/lib/supabase';
@@ -146,6 +148,7 @@ export default function PurchaseHistoryScreen() {
     new Date(d).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
   return (
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
     <View style={styles.container}>
       {/* Period Pills */}
       <View style={styles.pills}>
@@ -245,6 +248,7 @@ export default function PurchaseHistoryScreen() {
         />
       )}
     </View>
+    </KeyboardAvoidingView>
   );
 }
 

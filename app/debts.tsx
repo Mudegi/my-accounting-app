@@ -9,6 +9,8 @@ import {
   ScrollView,
   ActivityIndicator,
   RefreshControl,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { Text, View } from '@/components/Themed';
 import { supabase } from '@/lib/supabase';
@@ -498,6 +500,7 @@ export default function DebtsScreen() {
 
       {/* Record Payment Modal */}
       <Modal visible={showPayment} animationType="slide" transparent>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <ScrollView>
@@ -558,6 +561,7 @@ export default function DebtsScreen() {
             </ScrollView>
           </View>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Payment History Modal */}

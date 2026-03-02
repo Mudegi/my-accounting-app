@@ -6,6 +6,8 @@ import {
   TextInput,
   Alert,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { Text, View } from '@/components/Themed';
 import { supabase } from '@/lib/supabase';
@@ -64,6 +66,7 @@ export default function CategoriesScreen() {
   };
 
   return (
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
     <View style={styles.container}>
       <FlatList
         data={categories}
@@ -115,6 +118,7 @@ export default function CategoriesScreen() {
         }
       />
     </View>
+    </KeyboardAvoidingView>
   );
 }
 

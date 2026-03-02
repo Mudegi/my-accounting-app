@@ -8,6 +8,8 @@ import {
   Modal,
   ActivityIndicator,
   RefreshControl,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { Text, View } from '@/components/Themed';
 import { supabase } from '@/lib/supabase';
@@ -266,6 +268,7 @@ export default function LowStockScreen() {
 
       {/* Edit Reorder Level Modal */}
       <Modal visible={!!editingItem} animationType="slide" transparent>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Set Reorder Level</Text>
@@ -302,6 +305,7 @@ export default function LowStockScreen() {
             </TouchableOpacity>
           </View>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );

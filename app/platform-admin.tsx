@@ -9,6 +9,8 @@ import {
   ScrollView,
   RefreshControl,
   Modal,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { Text, View } from '@/components/Themed';
 import { supabase } from '@/lib/supabase';
@@ -455,6 +457,7 @@ export default function PlatformAdminScreen() {
 
       {/* ══════ ACTIVATE MODAL ══════ */}
       <Modal visible={activateModal} transparent animationType="slide">
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Activate Subscription</Text>
@@ -527,10 +530,12 @@ export default function PlatformAdminScreen() {
             </View>
           </View>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* ══════ EXTEND MODAL ══════ */}
       <Modal visible={extendModal} transparent animationType="slide">
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Extend Subscription</Text>
@@ -580,6 +585,7 @@ export default function PlatformAdminScreen() {
             </View>
           </View>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );

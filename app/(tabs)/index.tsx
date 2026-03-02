@@ -10,6 +10,8 @@ import {
   ActivityIndicator,
   ScrollView,
   BackHandler,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { Text, View } from '@/components/Themed';
 import { CameraView, useCameraPermissions } from 'expo-camera';
@@ -1028,6 +1030,7 @@ export default function SalesScreen() {
 
       {/* Credit Customer Picker Modal */}
       <Modal visible={showCreditPicker} animationType="slide" transparent>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
@@ -1073,10 +1076,12 @@ export default function SalesScreen() {
             />
           </View>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Search Modal */}
       <Modal visible={showSearch} animationType="slide" transparent>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
@@ -1139,10 +1144,12 @@ export default function SalesScreen() {
             />
           </View>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* EFRIS Fiscalize Modal */}
       <Modal visible={showFiscalize} animationType="slide" transparent>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <ScrollView>
@@ -1256,6 +1263,7 @@ export default function SalesScreen() {
             </ScrollView>
           </View>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );

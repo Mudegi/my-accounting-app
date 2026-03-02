@@ -9,6 +9,8 @@ import {
   ScrollView,
   ActivityIndicator,
   RefreshControl,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { Text, View } from '@/components/Themed';
 import { supabase } from '@/lib/supabase';
@@ -384,6 +386,7 @@ export default function CashRegisterScreen() {
 
       {/* Open Register Modal */}
       <Modal visible={showOpen} animationType="slide" transparent>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Open Cash Register</Text>
@@ -414,10 +417,12 @@ export default function CashRegisterScreen() {
             </TouchableOpacity>
           </View>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Close Register Modal */}
       <Modal visible={showClose} animationType="slide" transparent>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <ScrollView>
@@ -498,6 +503,7 @@ export default function CashRegisterScreen() {
             </ScrollView>
           </View>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Session Detail Modal */}

@@ -7,6 +7,8 @@ import {
   Alert,
   ActivityIndicator,
   ScrollView,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { Text, View } from '@/components/Themed';
 import { supabase } from '@/lib/supabase';
@@ -106,6 +108,7 @@ export default function ExpensesScreen() {
   };
 
   return (
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
     <View style={styles.container}>
       {/* Monthly Total */}
       <View style={styles.totalCard}>
@@ -222,6 +225,7 @@ export default function ExpensesScreen() {
         }
       />
     </View>
+    </KeyboardAvoidingView>
   );
 }
 

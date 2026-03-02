@@ -9,6 +9,8 @@ import {
   ScrollView,
   ActivityIndicator,
   RefreshControl,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { Text, View } from '@/components/Themed';
 import { supabase } from '@/lib/supabase';
@@ -339,6 +341,7 @@ export default function SalesTargetsScreen() {
 
       {/* Create/Edit Target Modal */}
       <Modal visible={showForm} animationType="slide" transparent>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <ScrollView>
@@ -413,6 +416,7 @@ export default function SalesTargetsScreen() {
             </ScrollView>
           </View>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );

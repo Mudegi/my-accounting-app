@@ -7,6 +7,8 @@ import {
   Alert,
   ActivityIndicator,
   ScrollView,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { Text, View } from '@/components/Themed';
 import { supabase } from '@/lib/supabase';
@@ -157,6 +159,7 @@ export default function UsersScreen() {
   };
 
   return (
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
     <View style={styles.container}>
       <TouchableOpacity style={styles.inviteBtn} onPress={() => setShowInvite(!showInvite)}>
         <FontAwesome name="user-plus" size={16} color="#fff" />
@@ -259,6 +262,7 @@ export default function UsersScreen() {
         />
       )}
     </View>
+    </KeyboardAvoidingView>
   );
 }
 

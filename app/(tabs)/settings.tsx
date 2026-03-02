@@ -7,6 +7,8 @@ import {
   Alert,
   TextInput,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { Text, View } from '@/components/Themed';
 import { useAuth } from '@/lib/auth';
@@ -122,6 +124,7 @@ export default function SettingsScreen() {
   const isAdmin = profile?.role === 'admin';
 
   return (
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
     <ScrollView style={styles.container}>
       {/* Profile Card */}
       <View style={styles.profileCard}>
@@ -459,6 +462,7 @@ export default function SettingsScreen() {
 
       <View style={{ height: 40 }} />
     </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 

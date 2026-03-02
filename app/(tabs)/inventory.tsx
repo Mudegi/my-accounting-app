@@ -7,6 +7,8 @@ import {
   TextInput,
   Alert,
   Image,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { Text, View } from '@/components/Themed';
 import { supabase } from '@/lib/supabase';
@@ -121,6 +123,7 @@ export default function InventoryScreen() {
   const outOfStockCount = items.filter((i) => i.quantity === 0).length;
 
   return (
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
     <View style={styles.container}>
       {/* Summary Bar */}
       <View style={styles.summaryBar}>
@@ -220,6 +223,7 @@ export default function InventoryScreen() {
         <FontAwesome name="plus" size={24} color="#fff" />
       </TouchableOpacity>
     </View>
+    </KeyboardAvoidingView>
   );
 }
 

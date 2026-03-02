@@ -7,6 +7,8 @@ import {
   Alert,
   ActivityIndicator,
   FlatList,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { Text, View } from '@/components/Themed';
 import { useAuth } from '@/lib/auth';
@@ -150,6 +152,7 @@ export default function OnboardingScreen() {
   );
 
   return (
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
     <View style={styles.container}>
       {renderStepIndicator()}
 
@@ -301,6 +304,7 @@ export default function OnboardingScreen() {
         )}
       </ScrollView>
     </View>
+    </KeyboardAvoidingView>
   );
 }
 

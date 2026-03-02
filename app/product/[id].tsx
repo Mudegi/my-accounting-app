@@ -7,6 +7,8 @@ import {
   Alert,
   ActivityIndicator,
   Image,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { Text, View } from '@/components/Themed';
 import { supabase } from '@/lib/supabase';
@@ -432,6 +434,7 @@ export default function ProductFormScreen() {
   };
 
   return (
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
     <View style={styles.container}>
       {scanning ? (
         <View style={styles.scannerContainer}>
@@ -743,6 +746,7 @@ export default function ProductFormScreen() {
         </ScrollView>
       )}
     </View>
+    </KeyboardAvoidingView>
   );
 }
 

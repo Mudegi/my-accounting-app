@@ -8,6 +8,8 @@ import {
   Modal,
   ScrollView,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { Text, View } from '@/components/Themed';
 import { supabase } from '@/lib/supabase';
@@ -164,6 +166,7 @@ export default function SuppliersScreen() {
 
       {/* Add/Edit Modal */}
       <Modal visible={showForm} animationType="slide" transparent>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <ScrollView>
@@ -207,6 +210,7 @@ export default function SuppliersScreen() {
             </ScrollView>
           </View>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );

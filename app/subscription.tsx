@@ -7,6 +7,8 @@ import {
   Alert,
   ActivityIndicator,
   Linking,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { Text, View } from '@/components/Themed';
 import { useAuth } from '@/lib/auth';
@@ -166,6 +168,7 @@ export default function SubscriptionScreen() {
   const subStatus = subscriptionStatus?.status || currentSub?.status || 'unknown';
 
   return (
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
     <View style={styles.container}>
       {/* Current Plan Banner */}
       <View style={[styles.statusBanner, { borderColor: statusColor(subStatus) }]}>
@@ -367,6 +370,7 @@ export default function SubscriptionScreen() {
         )}
       </ScrollView>
     </View>
+    </KeyboardAvoidingView>
   );
 }
 

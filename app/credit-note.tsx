@@ -8,6 +8,8 @@ import {
   ActivityIndicator,
   ScrollView,
   Modal,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { Text, View } from '@/components/Themed';
 import { supabase } from '@/lib/supabase';
@@ -254,6 +256,7 @@ export default function CreditNoteScreen() {
   };
 
   return (
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
     <View style={styles.container}>
       <TouchableOpacity style={styles.addBtn} onPress={openForm}>
         <FontAwesome name="undo" size={16} color="#fff" />
@@ -391,6 +394,7 @@ export default function CreditNoteScreen() {
         />
       )}
     </View>
+    </KeyboardAvoidingView>
   );
 }
 

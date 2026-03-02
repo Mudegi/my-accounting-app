@@ -6,6 +6,8 @@ import {
   TextInput,
   Alert,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { Text, View } from '@/components/Themed';
 import { supabase } from '@/lib/supabase';
@@ -176,6 +178,7 @@ export default function TransfersScreen() {
   };
 
   return (
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
     <View style={styles.container}>
       {!showForm && otherBranches.length > 0 && (
         <TouchableOpacity style={styles.addButton} onPress={() => setShowForm(true)}>
@@ -262,6 +265,7 @@ export default function TransfersScreen() {
         }
       />
     </View>
+    </KeyboardAvoidingView>
   );
 }
 
