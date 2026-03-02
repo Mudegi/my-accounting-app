@@ -255,7 +255,7 @@ export default function PlatformAdminScreen() {
 
       // Status filter
       const matchesStatus = statusFilter === 'all' ||
-        (statusFilter === 'pending' && b.pending_reason && b.subscription_status !== 'active') ||
+        (statusFilter === 'pending' && b.pending_reason && b.subscription_status !== 'active' && b.subscription_status !== 'approved') ||
         b.subscription_status === statusFilter;
 
       return matchesSearch && matchesReason && matchesStatus;
@@ -266,6 +266,7 @@ export default function PlatformAdminScreen() {
     const colors: Record<string, string> = {
       trial: '#FF9800',
       active: '#4CAF50',
+      approved: '#00BCD4',
       past_due: '#FF5722',
       cancelled: '#8B1A1A',
       expired: '#666',
@@ -376,6 +377,7 @@ export default function PlatformAdminScreen() {
               { key: 'all', label: 'All' },
               { key: 'pending', label: '\u{1F4E9} Pending Reason' },
               { key: 'trial', label: 'Trial' },
+              { key: 'approved', label: '\u2705 Approved' },
               { key: 'active', label: 'Active' },
               { key: 'expired', label: 'Expired' },
             ].map(f => (
@@ -455,7 +457,7 @@ export default function PlatformAdminScreen() {
                     <FontAwesome name="calendar-plus-o" size={12} color="#fff" />
                     <Text style={styles.actionBtnText}>Extend</Text>
                   </TouchableOpacity>
-                  {(item.subscription_status === 'active' || item.subscription_status === 'trial') && (
+                  {(item.subscription_status === 'active' || item.subscription_status === 'approved' || item.subscription_status === 'trial') && (
                     <TouchableOpacity
                       style={[styles.actionBtn, { backgroundColor: '#8B1A1A' }]}
                       onPress={() => handleCancel(item)}

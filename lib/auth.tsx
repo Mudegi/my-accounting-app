@@ -30,7 +30,7 @@ type Business = {
   efris_test_mode: boolean;
   app_mode: 'basic' | 'pro';
   default_currency: string;
-  subscription_status: 'trial' | 'active' | 'past_due' | 'cancelled' | 'expired' | null;
+  subscription_status: 'trial' | 'active' | 'approved' | 'past_due' | 'cancelled' | 'expired' | null;
   subscription_ends_at: string | null;
 };
 

@@ -249,6 +249,7 @@ export function statusLabel(status: string): string {
   switch (status) {
     case 'trial': return 'Free Trial';
     case 'active': return 'Active';
+    case 'approved': return '✅ Approved';
     case 'past_due': return 'Past Due';
     case 'cancelled': return 'Cancelled';
     case 'expired': return 'Expired';
@@ -261,6 +262,7 @@ export function statusColor(status: string): string {
   switch (status) {
     case 'trial': return '#2196F3';
     case 'active': return '#4CAF50';
+    case 'approved': return '#00BCD4';
     case 'past_due': return '#FF9800';
     case 'cancelled': return '#e94560';
     case 'expired': return '#e94560';

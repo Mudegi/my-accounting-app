@@ -244,7 +244,7 @@ export default function SubscriptionScreen() {
               {!isCurrent && plan.name !== 'free_trial' && (
                 <TouchableOpacity style={styles.selectPlanBtn} onPress={() => handleSelectPlan(plan.id)}>
                   <Text style={styles.selectPlanText}>
-                    {subStatus === 'active' ? 'Switch Plan' : 'Subscribe'}
+                    {(subStatus === 'active' || subStatus === 'approved') ? 'Switch Plan' : 'Subscribe'}
                   </Text>
                 </TouchableOpacity>
               )}
