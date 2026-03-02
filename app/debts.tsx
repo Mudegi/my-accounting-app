@@ -78,20 +78,26 @@ export default function DebtsScreen() {
     if (!business) return;
 
     try {
-      // Get all credit sales with customer info
+      // Get all credit sales
       let query = supabase
         .from('sales')
-        .select('id, total_amount, customer_id, created_at, status')
+        .select('id, total_amount, customer_id, customer_name, created_at, status')
         .eq('business_id', business.id)
         .eq('payment_method', 'credit')
-        .eq('status', 'completed')
-        .not('customer_id', 'is', null);
+        .eq('status', 'completed');
 
       if (!isAdmin && currentBranch) {
         query = query.eq('branch_id', currentBranch.id);
       }
 
-      const { data: creditSalesData } = await query;
+      const { data: creditSalesData, error: salesError } = await query;
+
+      if (salesError) {
+        console.error('Debts query error:', salesError.message);
+        Alert.alert('Error', salesError.message);
+        setLoading(false);
+        return;
+      }
 
       if (!creditSalesData || creditSalesData.length === 0) {
         setCustomers([]);
@@ -105,16 +111,18 @@ export default function DebtsScreen() {
         .from('debt_payments')
         .select('sale_id, amount')
         .in('sale_id', saleIds);
+      // Note: if debt_payments table doesn't exist yet, paymentsData will be null — that's OK
 
-      // Get customer details
-      const customerIds = [...new Set(creditSalesData.map(s => s.customer_id!))];
-      const { data: customersData } = await supabase
-        .from('customers')
-        .select('id, name, phone')
-        .in('id', customerIds);
-
-      const customerMap: Record<string, { name: string; phone: string | null }> = {};
-      customersData?.forEach(c => { customerMap[c.id] = { name: c.name, phone: c.phone }; });
+      // Get customer details for sales that have customer_id
+      const customerIds = [...new Set(creditSalesData.map(s => s.customer_id).filter(Boolean))] as string[];
+      let customerMap: Record<string, { name: string; phone: string | null }> = {};
+      if (customerIds.length > 0) {
+        const { data: customersData } = await supabase
+          .from('customers')
+          .select('id, name, phone')
+          .in('id', customerIds);
+        customersData?.forEach(c => { customerMap[c.id] = { name: c.name, phone: c.phone }; });
+      }
 
       // Aggregate payments per sale
       const paymentsBySale: Record<string, number> = {};
@@ -122,12 +130,15 @@ export default function DebtsScreen() {
         paymentsBySale[p.sale_id] = (paymentsBySale[p.sale_id] || 0) + Number(p.amount);
       });
 
-      // Aggregate per customer
+      // Aggregate per customer (or by customer_name for walk-in credit sales)
       const custMap: Record<string, DebtCustomer> = {};
       creditSalesData.forEach(sale => {
-        const custId = sale.customer_id!;
+        // Use customer_id if available, otherwise group by customer_name
+        const custId = sale.customer_id || `name:${sale.customer_name || 'Walk-in'}`;
         if (!custMap[custId]) {
-          const info = customerMap[custId] || { name: 'Unknown', phone: null };
+          const info = sale.customer_id
+            ? (customerMap[sale.customer_id] || { name: sale.customer_name || 'Unknown', phone: null })
+            : { name: sale.customer_name || 'Walk-in Customer', phone: null };
           custMap[custId] = {
             id: custId,
             name: info.name,
@@ -182,8 +193,15 @@ export default function DebtsScreen() {
         .eq('business_id', business!.id)
         .eq('payment_method', 'credit')
         .eq('status', 'completed')
-        .eq('customer_id', customer.id)
         .order('created_at', { ascending: false });
+
+      // For walk-in debts (id starts with "name:"), filter by customer_name
+      if (customer.id.startsWith('name:')) {
+        const custName = customer.id.replace('name:', '');
+        query = query.is('customer_id', null).eq('customer_name', custName);
+      } else {
+        query = query.eq('customer_id', customer.id);
+      }
 
       if (!isAdmin && currentBranch) {
         query = query.eq('branch_id', currentBranch.id);
@@ -248,12 +266,19 @@ export default function DebtsScreen() {
     setSaving(true);
     try {
       // Insert debt payment record
+      const isWalkin = selectedCustomer!.id.startsWith('name:');
+      if (isWalkin) {
+        // Walk-in credit sales can't have debt_payments (no customer record)
+        // Just update the sale directly
+        Alert.alert('Note', 'Walk-in credit sale — payment noted but no customer record linked.');
+      }
+
       const { error } = await supabase
         .from('debt_payments')
         .insert({
           business_id: business.id,
           sale_id: payingSale.id,
-          customer_id: selectedCustomer!.id,
+          customer_id: isWalkin ? undefined : selectedCustomer!.id,
           amount,
           payment_method: payMethod,
           note: payNote.trim() || null,
