@@ -39,6 +39,7 @@ export type Payment = {
   currency: string;
   payment_method: string;
   payment_reference: string | null;
+  payment_reason: string | null;
   phone_number: string | null;
   status: 'pending' | 'processing' | 'completed' | 'failed' | 'refunded';
   paid_at: string | null;
@@ -126,6 +127,7 @@ export async function initiatePayment(params: {
   paymentMethod: string;
   phoneNumber?: string;
   billingCycle: 'monthly' | 'yearly';
+  paymentReason?: string;
 }): Promise<{ payment: Payment | null; error: any }> {
   // 1. Create pending payment record
   const { data: payment, error: payErr } = await supabase
@@ -137,6 +139,7 @@ export async function initiatePayment(params: {
       currency: params.currency,
       payment_method: params.paymentMethod,
       phone_number: params.phoneNumber || null,
+      payment_reason: params.paymentReason || null,
       status: 'pending',
     })
     .select()

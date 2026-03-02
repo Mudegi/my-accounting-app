@@ -282,34 +282,49 @@ export default function SubscriptionScreen() {
                 </TouchableOpacity>
               </View>
 
-              {/* Payment Method */}
-              <Text style={styles.label}>Payment Method</Text>
-              {PAYMENT_METHOD_OPTIONS.map((opt) => (
-                <TouchableOpacity
-                  key={opt.value}
-                  style={[styles.payMethodCard, payMethod === opt.value && styles.payMethodCardActive]}
-                  onPress={() => setPayMethod(opt.value)}
-                >
-                  <FontAwesome name={opt.icon as any} size={20} color={payMethod === opt.value ? '#e94560' : '#888'} />
-                  <Text style={[styles.payMethodText, payMethod === opt.value && { color: '#fff' }]}>{opt.label}</Text>
-                  {payMethod === opt.value && <FontAwesome name="check" size={16} color="#e94560" />}
-                </TouchableOpacity>
-              ))}
+              {/* How to Pay */}
+              <Text style={styles.label}>How to Pay</Text>
+              <View style={styles.sendMoneyCard}>
+                <Text style={styles.sendMoneyTitle}>Send Mobile Money to:</Text>
+                <View style={styles.phoneRow}>
+                  <FontAwesome name="phone" size={16} color="#FFCC00" />
+                  <Text style={styles.phoneNumber}>0770 546 489</Text>
+                  <Text style={styles.phoneName}>— Mudegi Emma (MTN)</Text>
+                </View>
+                <View style={styles.phoneRow}>
+                  <FontAwesome name="phone" size={16} color="#e94560" />
+                  <Text style={styles.phoneNumber}>0706 090 021</Text>
+                  <Text style={styles.phoneName}>— Mudegi Emma (Airtel)</Text>
+                </View>
+                <Text style={styles.sendMoneyHint}>
+                  Send {formatCurrency(amount, plan.currency)} to either number above.
+                  When prompted for a reason, type your business name.
+                </Text>
+              </View>
 
-              {/* Phone number for mobile money */}
-              {(payMethod === 'mtn_momo' || payMethod === 'airtel_money') && (
-                <>
-                  <Text style={styles.label}>Mobile Money Number</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={phoneNumber}
-                    onChangeText={setPhoneNumber}
-                    placeholder="0770 XXX XXX"
-                    placeholderTextColor="#555"
-                    keyboardType="phone-pad"
-                  />
-                </>
-              )}
+              {/* Your phone number */}
+              <Text style={styles.label}>Your Phone Number (that you sent from)</Text>
+              <TextInput
+                style={styles.input}
+                value={phoneNumber}
+                onChangeText={setPhoneNumber}
+                placeholder="e.g. 0770 123 456"
+                placeholderTextColor="#555"
+                keyboardType="phone-pad"
+              />
+
+              {/* Reason / Reference */}
+              <Text style={styles.label}>Reason / Reference You Entered *</Text>
+              <TextInput
+                style={styles.input}
+                value={paymentReason}
+                onChangeText={setPaymentReason}
+                placeholder="e.g. MyShop Subscription"
+                placeholderTextColor="#555"
+              />
+              <Text style={{ color: '#888', fontSize: 11, marginTop: -6, marginBottom: 12 }}>
+                Enter the exact reason you typed when sending the money
+              </Text>
 
               {/* Summary */}
               <View style={styles.paymentSummary}>
@@ -325,7 +340,7 @@ export default function SubscriptionScreen() {
                 {processing ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
-                  <Text style={styles.payButtonText}>Pay {formatCurrency(amount, plan.currency)}</Text>
+                  <Text style={styles.payButtonText}>I've Sent the Money</Text>
                 )}
               </TouchableOpacity>
             </>
@@ -421,6 +436,13 @@ const styles = StyleSheet.create({
   payMethodCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#16213e', padding: 14, borderRadius: 12, marginBottom: 8, borderWidth: 1, borderColor: '#0f3460' },
   payMethodCardActive: { borderColor: '#e94560' },
   payMethodText: { flex: 1, color: '#888', fontSize: 15 },
+
+  sendMoneyCard: { backgroundColor: '#0f3460', borderRadius: 14, padding: 16, borderWidth: 1, borderColor: '#e94560' },
+  sendMoneyTitle: { color: '#fff', fontSize: 15, fontWeight: 'bold', marginBottom: 12 },
+  phoneRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8, backgroundColor: 'transparent' },
+  phoneNumber: { color: '#fff', fontSize: 17, fontWeight: 'bold', letterSpacing: 1 },
+  phoneName: { color: '#aaa', fontSize: 13 },
+  sendMoneyHint: { color: '#4CAF50', fontSize: 12, marginTop: 8, lineHeight: 18 },
 
   paymentSummary: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#16213e', padding: 16, borderRadius: 12, marginTop: 20, borderWidth: 1, borderColor: '#0f3460' },
   summaryLabel: { color: '#aaa', fontSize: 16 },
