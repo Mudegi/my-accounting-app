@@ -17,7 +17,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { postSaleEntry, PAYMENT_METHODS, ACC, PAYMENT_ACCOUNT_MAP } from '@/lib/accounting';
+import { postSaleEntry, postSupplierPaymentEntry, PAYMENT_METHODS, ACC, PAYMENT_ACCOUNT_MAP } from '@/lib/accounting';
 
 type DebtCustomer = {
   id: string;
@@ -39,6 +39,33 @@ type CreditSale = {
 };
 
 type DebtPayment = {
+  id: string;
+  amount: number;
+  payment_method: string;
+  note: string | null;
+  created_at: string;
+};
+
+// ─── Payable types (supplier debts we owe) ────
+
+type PayableSupplier = {
+  id: string;
+  name: string;
+  totalOwed: number;
+  totalPaid: number;
+  balance: number;
+  purchaseCount: number;
+};
+
+type CreditPurchase = {
+  id: string;
+  total_amount: number;
+  created_at: string;
+  paid: number;
+  balance: number;
+};
+
+type SupplierPayment = {
   id: string;
   amount: number;
   payment_method: string;
@@ -73,6 +100,25 @@ export default function DebtsScreen() {
   const [showHistory, setShowHistory] = useState(false);
   const [historyPayments, setHistoryPayments] = useState<DebtPayment[]>([]);
   const [historySaleId, setHistorySaleId] = useState<string>('');
+
+  // ─── Tab toggle: Receivables (customer debts) vs Payables (supplier debts) ────
+  const [activeTab, setActiveTab] = useState<'receivables' | 'payables'>('receivables');
+
+  // ─── Payables state ────
+  const [suppliers, setSuppliers] = useState<PayableSupplier[]>([]);
+  const [loadingPayables, setLoadingPayables] = useState(false);
+  const [selectedSupplier, setSelectedSupplier] = useState<PayableSupplier | null>(null);
+  const [creditPurchases, setCreditPurchases] = useState<CreditPurchase[]>([]);
+  const [loadingSupplierDetail, setLoadingSupplierDetail] = useState(false);
+  const [showSupplierPayment, setShowSupplierPayment] = useState(false);
+  const [payingPurchase, setPayingPurchase] = useState<CreditPurchase | null>(null);
+  const [supplierPayAmount, setSupplierPayAmount] = useState('');
+  const [supplierPayMethod, setSupplierPayMethod] = useState('cash');
+  const [supplierPayNote, setSupplierPayNote] = useState('');
+  const [savingSupplierPay, setSavingSupplierPay] = useState(false);
+  const [showSupplierHistory, setShowSupplierHistory] = useState(false);
+  const [supplierHistoryPayments, setSupplierHistoryPayments] = useState<SupplierPayment[]>([]);
+  const [supplierHistoryPurchaseId, setSupplierHistoryPurchaseId] = useState<string>('');
 
   const loadDebts = useCallback(async () => {
     if (!business) return;
@@ -173,12 +219,245 @@ export default function DebtsScreen() {
     }
   }, [business, currentBranch, isAdmin]);
 
-  useFocusEffect(useCallback(() => { loadDebts(); }, [loadDebts]));
+  useFocusEffect(useCallback(() => { loadDebts(); loadPayables(); }, [loadDebts]));
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await loadDebts();
+    if (activeTab === 'receivables') {
+      await loadDebts();
+    } else {
+      await loadPayables();
+    }
     setRefreshing(false);
+  };
+
+  // ─── PAYABLES: Load credit purchases (business owes suppliers) ────
+
+  const loadPayables = useCallback(async () => {
+    if (!business) return;
+    setLoadingPayables(true);
+    try {
+      let query = supabase
+        .from('purchases')
+        .select('id, supplier_name, supplier_id, total_amount, paid_amount, status, created_at')
+        .eq('business_id', business.id)
+        .eq('payment_method', 'credit');
+
+      if (!isAdmin && currentBranch) {
+        query = query.eq('branch_id', currentBranch.id);
+      }
+
+      const { data: creditPurchasesData, error: purchError } = await query;
+
+      if (purchError) {
+        console.error('Payables query error:', purchError.message);
+        Alert.alert('Error', purchError.message);
+        setLoadingPayables(false);
+        return;
+      }
+
+      if (!creditPurchasesData || creditPurchasesData.length === 0) {
+        setSuppliers([]);
+        setLoadingPayables(false);
+        return;
+      }
+
+      // Get supplier payments
+      const purchaseIds = creditPurchasesData.map(p => p.id);
+      const { data: paymentsData } = await supabase
+        .from('supplier_payments')
+        .select('purchase_id, amount')
+        .in('purchase_id', purchaseIds);
+
+      // Aggregate payments per purchase
+      const paymentsByPurchase: Record<string, number> = {};
+      paymentsData?.forEach(p => {
+        paymentsByPurchase[p.purchase_id] = (paymentsByPurchase[p.purchase_id] || 0) + Number(p.amount);
+      });
+
+      // Aggregate per supplier
+      const supplierMap: Record<string, PayableSupplier> = {};
+      creditPurchasesData.forEach(purchase => {
+        const suppKey = purchase.supplier_id || `name:${purchase.supplier_name || 'Unknown Supplier'}`;
+        if (!supplierMap[suppKey]) {
+          supplierMap[suppKey] = {
+            id: suppKey,
+            name: purchase.supplier_name || 'Unknown Supplier',
+            totalOwed: 0,
+            totalPaid: 0,
+            balance: 0,
+            purchaseCount: 0,
+          };
+        }
+        const paidFromPayments = paymentsByPurchase[purchase.id] || 0;
+        const paidFromRecord = Number(purchase.paid_amount) || 0;
+        const actualPaid = Math.max(paidFromPayments, paidFromRecord);
+        supplierMap[suppKey].totalOwed += Number(purchase.total_amount);
+        supplierMap[suppKey].totalPaid += actualPaid;
+        supplierMap[suppKey].purchaseCount += 1;
+      });
+
+      // Compute balances
+      Object.values(supplierMap).forEach(s => {
+        s.balance = s.totalOwed - s.totalPaid;
+      });
+
+      const sorted = Object.values(supplierMap)
+        .filter(s => s.balance > 0)
+        .sort((a, b) => b.balance - a.balance);
+
+      setSuppliers(sorted);
+    } catch (err: any) {
+      Alert.alert('Error', err.message);
+    } finally {
+      setLoadingPayables(false);
+    }
+  }, [business, currentBranch, isAdmin]);
+
+  // Open supplier detail (show their credit purchases)
+  const openSupplierDetail = async (supplier: PayableSupplier) => {
+    setSelectedSupplier(supplier);
+    setLoadingSupplierDetail(true);
+
+    try {
+      let query = supabase
+        .from('purchases')
+        .select('id, total_amount, paid_amount, created_at')
+        .eq('business_id', business!.id)
+        .eq('payment_method', 'credit')
+        .order('created_at', { ascending: false });
+
+      if (supplier.id.startsWith('name:')) {
+        const suppName = supplier.id.replace('name:', '');
+        query = query.is('supplier_id', null).eq('supplier_name', suppName);
+      } else {
+        query = query.eq('supplier_id', supplier.id);
+      }
+
+      if (!isAdmin && currentBranch) {
+        query = query.eq('branch_id', currentBranch.id);
+      }
+
+      const { data: purchases } = await query;
+
+      if (purchases) {
+        const purchaseIds = purchases.map(p => p.id);
+        const { data: payments } = await supabase
+          .from('supplier_payments')
+          .select('purchase_id, amount')
+          .in('purchase_id', purchaseIds);
+
+        const paymentsByPurchase: Record<string, number> = {};
+        payments?.forEach(p => {
+          paymentsByPurchase[p.purchase_id] = (paymentsByPurchase[p.purchase_id] || 0) + Number(p.amount);
+        });
+
+        const enriched: CreditPurchase[] = purchases.map(p => {
+          const paidFromPayments = paymentsByPurchase[p.id] || 0;
+          const paidFromRecord = Number(p.paid_amount) || 0;
+          const actualPaid = Math.max(paidFromPayments, paidFromRecord);
+          return {
+            id: p.id,
+            total_amount: Number(p.total_amount),
+            created_at: p.created_at,
+            paid: actualPaid,
+            balance: Number(p.total_amount) - actualPaid,
+          };
+        });
+
+        setCreditPurchases(enriched);
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err.message);
+    } finally {
+      setLoadingSupplierDetail(false);
+    }
+  };
+
+  // Record payment to supplier
+  const openSupplierPaymentModal = (purchase: CreditPurchase) => {
+    setPayingPurchase(purchase);
+    setSupplierPayAmount(purchase.balance.toString());
+    setSupplierPayMethod('cash');
+    setSupplierPayNote('');
+    setShowSupplierPayment(true);
+  };
+
+  const handleRecordSupplierPayment = async () => {
+    if (!payingPurchase || !business || !profile) return;
+    const amount = parseFloat(supplierPayAmount);
+    if (!amount || amount <= 0) {
+      Alert.alert('Error', 'Enter a valid payment amount');
+      return;
+    }
+    if (amount > payingPurchase.balance) {
+      Alert.alert('Error', `Amount exceeds outstanding balance of ${fmt(payingPurchase.balance)}`);
+      return;
+    }
+
+    setSavingSupplierPay(true);
+    try {
+      // Insert supplier payment record
+      const { error } = await supabase
+        .from('supplier_payments')
+        .insert({
+          business_id: business.id,
+          purchase_id: payingPurchase.id,
+          supplier_id: selectedSupplier && !selectedSupplier.id.startsWith('name:') ? selectedSupplier.id : null,
+          supplier_name: selectedSupplier?.name || 'Unknown',
+          amount,
+          payment_method: supplierPayMethod,
+          note: supplierPayNote.trim() || null,
+          paid_by: profile.id,
+        });
+
+      if (error) throw error;
+
+      // Update purchase paid_amount and status
+      const newPaid = payingPurchase.paid + amount;
+      const newStatus = newPaid >= payingPurchase.total_amount ? 'paid' : 'partial';
+      await supabase
+        .from('purchases')
+        .update({ paid_amount: newPaid, status: newStatus })
+        .eq('id', payingPurchase.id);
+
+      // Post accounting entry: DR Accounts Payable, CR Cash/MoMo/Bank
+      await postSupplierPaymentEntry({
+        businessId: business.id,
+        branchId: currentBranch?.id || null,
+        paymentId: payingPurchase.id,
+        amount,
+        supplierName: selectedSupplier?.name || 'Supplier',
+        paymentMethod: supplierPayMethod,
+        userId: profile.id,
+      });
+
+      Alert.alert('Success', `Payment of ${fmt(amount)} to supplier recorded`);
+      setShowSupplierPayment(false);
+
+      // Refresh
+      if (selectedSupplier) {
+        await openSupplierDetail(selectedSupplier);
+      }
+      await loadPayables();
+    } catch (err: any) {
+      Alert.alert('Error', err.message);
+    } finally {
+      setSavingSupplierPay(false);
+    }
+  };
+
+  // View supplier payment history for a purchase
+  const viewSupplierPaymentHistory = async (purchaseId: string) => {
+    setSupplierHistoryPurchaseId(purchaseId);
+    const { data } = await supabase
+      .from('supplier_payments')
+      .select('id, amount, payment_method, note, created_at')
+      .eq('purchase_id', purchaseId)
+      .order('created_at', { ascending: false });
+
+    setSupplierHistoryPayments(data || []);
+    setShowSupplierHistory(true);
   };
 
   // Open customer detail
@@ -363,6 +642,7 @@ export default function DebtsScreen() {
   };
 
   const totalOutstanding = customers.reduce((sum, c) => sum + c.balance, 0);
+  const totalPayables = suppliers.reduce((sum, s) => sum + s.balance, 0);
 
   const filtered = searchQuery.trim()
     ? customers.filter(c =>
@@ -370,6 +650,10 @@ export default function DebtsScreen() {
         (c.phone && c.phone.includes(searchQuery))
       )
     : customers;
+
+  const filteredSuppliers = searchQuery.trim()
+    ? suppliers.filter(s => s.name.toLowerCase().includes(searchQuery.toLowerCase()))
+    : suppliers;
 
   const formatDate = (d: string) => new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
   const formatTime = (d: string) => new Date(d).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
@@ -389,66 +673,157 @@ export default function DebtsScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Summary Card */}
-      <View style={styles.summaryCard}>
-        <View style={styles.summaryRow}>
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryValue}>{fmt(totalOutstanding)}</Text>
-            <Text style={styles.summaryLabel}>Total Outstanding</Text>
-          </View>
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryValue}>{customers.length}</Text>
-            <Text style={styles.summaryLabel}>Debtors</Text>
-          </View>
-        </View>
+      {/* Tab Toggle */}
+      <View style={styles.tabRow}>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'receivables' && styles.tabActive]}
+          onPress={() => setActiveTab('receivables')}
+        >
+          <FontAwesome name="arrow-down" size={14} color={activeTab === 'receivables' ? '#fff' : '#aaa'} />
+          <Text style={[styles.tabText, activeTab === 'receivables' && styles.tabTextActive]}>
+            Receivables
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'payables' && styles.tabActivePayable]}
+          onPress={() => { setActiveTab('payables'); if (suppliers.length === 0 && !loadingPayables) loadPayables(); }}
+        >
+          <FontAwesome name="arrow-up" size={14} color={activeTab === 'payables' ? '#fff' : '#aaa'} />
+          <Text style={[styles.tabText, activeTab === 'payables' && styles.tabTextActive]}>
+            Payables
+          </Text>
+        </TouchableOpacity>
       </View>
 
-      {/* Search */}
-      <View style={styles.searchRow}>
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search debtors..."
-          placeholderTextColor="#666"
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-        />
-      </View>
-
-      {/* Debtor List */}
-      <FlatList
-        data={filtered}
-        keyExtractor={(item) => item.id}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#e94560" />}
-        renderItem={({ item }) => (
-          <TouchableOpacity style={styles.card} onPress={() => openCustomerDetail(item)}>
-            <View style={styles.cardHeader}>
-              <View style={styles.cardInfo}>
-                <Text style={styles.cardName}>{item.name}</Text>
-                {item.phone ? <Text style={styles.cardSub}>📱 {item.phone}</Text> : null}
-                <Text style={styles.cardSub}>
-                  {item.salesCount} credit sale{item.salesCount !== 1 ? 's' : ''}
-                </Text>
+      {activeTab === 'receivables' ? (
+        <>
+          {/* Summary Card */}
+          <View style={styles.summaryCard}>
+            <View style={styles.summaryRow}>
+              <View style={styles.summaryItem}>
+                <Text style={styles.summaryValue}>{fmt(totalOutstanding)}</Text>
+                <Text style={styles.summaryLabel}>Owed to You</Text>
               </View>
-              <View style={styles.cardRight}>
-                <Text style={styles.debtAmount}>{fmt(item.balance)}</Text>
-                <Text style={styles.debtLabel}>owes</Text>
+              <View style={styles.summaryItem}>
+                <Text style={styles.summaryValue}>{customers.length}</Text>
+                <Text style={styles.summaryLabel}>Debtors</Text>
               </View>
             </View>
-            {item.totalPaid > 0 && (
-              <View style={styles.progressBar}>
-                <View style={[styles.progressFill, { width: `${Math.min(100, (item.totalPaid / item.totalDebt) * 100)}%` }]} />
-              </View>
-            )}
-          </TouchableOpacity>
-        )}
-        ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <FontAwesome name="check-circle" size={48} color="#4CAF50" />
-            <Text style={styles.emptyText}>No outstanding debts!</Text>
-            <Text style={styles.emptyHint}>Credit sales will appear here</Text>
           </View>
-        }
-      />
+
+          {/* Search */}
+          <View style={styles.searchRow}>
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search debtors..."
+              placeholderTextColor="#666"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+          </View>
+
+          {/* Debtor List */}
+          <FlatList
+            data={filtered}
+            keyExtractor={(item) => item.id}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#e94560" />}
+            renderItem={({ item }) => (
+              <TouchableOpacity style={styles.card} onPress={() => openCustomerDetail(item)}>
+                <View style={styles.cardHeader}>
+                  <View style={styles.cardInfo}>
+                    <Text style={styles.cardName}>{item.name}</Text>
+                    {item.phone ? <Text style={styles.cardSub}>{'\u{1F4F1}'} {item.phone}</Text> : null}
+                    <Text style={styles.cardSub}>
+                      {item.salesCount} credit sale{item.salesCount !== 1 ? 's' : ''}
+                    </Text>
+                  </View>
+                  <View style={styles.cardRight}>
+                    <Text style={styles.debtAmount}>{fmt(item.balance)}</Text>
+                    <Text style={styles.debtLabel}>owes</Text>
+                  </View>
+                </View>
+                {item.totalPaid > 0 && (
+                  <View style={styles.progressBar}>
+                    <View style={[styles.progressFill, { width: `${Math.min(100, (item.totalPaid / item.totalDebt) * 100)}%` }]} />
+                  </View>
+                )}
+              </TouchableOpacity>
+            )}
+            ListEmptyComponent={
+              <View style={styles.emptyState}>
+                <FontAwesome name="check-circle" size={48} color="#4CAF50" />
+                <Text style={styles.emptyText}>No outstanding debts!</Text>
+                <Text style={styles.emptyHint}>Credit sales will appear here</Text>
+              </View>
+            }
+          />
+        </>
+      ) : (
+        <>
+          {/* Payables Summary */}
+          <View style={[styles.summaryCard, { borderColor: '#FF9800' }]}>
+            <View style={styles.summaryRow}>
+              <View style={styles.summaryItem}>
+                <Text style={[styles.summaryValue, { color: '#FF9800' }]}>{fmt(totalPayables)}</Text>
+                <Text style={styles.summaryLabel}>You Owe</Text>
+              </View>
+              <View style={styles.summaryItem}>
+                <Text style={[styles.summaryValue, { color: '#FF9800' }]}>{suppliers.length}</Text>
+                <Text style={styles.summaryLabel}>Creditors</Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Search */}
+          <View style={styles.searchRow}>
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search suppliers..."
+              placeholderTextColor="#666"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+          </View>
+
+          {loadingPayables ? (
+            <ActivityIndicator size="large" color="#FF9800" style={{ marginTop: 40 }} />
+          ) : (
+            <FlatList
+              data={filteredSuppliers}
+              keyExtractor={(item) => item.id}
+              refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FF9800" />}
+              renderItem={({ item }) => (
+                <TouchableOpacity style={styles.card} onPress={() => openSupplierDetail(item)}>
+                  <View style={styles.cardHeader}>
+                    <View style={styles.cardInfo}>
+                      <Text style={styles.cardName}>{item.name}</Text>
+                      <Text style={styles.cardSub}>
+                        {item.purchaseCount} credit purchase{item.purchaseCount !== 1 ? 's' : ''}
+                      </Text>
+                    </View>
+                    <View style={styles.cardRight}>
+                      <Text style={[styles.debtAmount, { color: '#FF9800' }]}>{fmt(item.balance)}</Text>
+                      <Text style={styles.debtLabel}>you owe</Text>
+                    </View>
+                  </View>
+                  {item.totalPaid > 0 && (
+                    <View style={styles.progressBar}>
+                      <View style={[styles.progressFill, { width: `${Math.min(100, (item.totalPaid / item.totalOwed) * 100)}%` }]} />
+                    </View>
+                  )}
+                </TouchableOpacity>
+              )}
+              ListEmptyComponent={
+                <View style={styles.emptyState}>
+                  <FontAwesome name="check-circle" size={48} color="#4CAF50" />
+                  <Text style={styles.emptyText}>No outstanding payables!</Text>
+                  <Text style={styles.emptyHint}>Credit purchases will appear here</Text>
+                </View>
+              }
+            />
+          )}
+        </>
+      )}
 
       {/* Customer Detail Modal */}
       <Modal visible={!!selectedCustomer} animationType="slide" transparent>
@@ -622,12 +997,197 @@ export default function DebtsScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* ═══ SUPPLIER DETAIL MODAL ═══ */}
+      <Modal visible={!!selectedSupplier} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{selectedSupplier?.name}</Text>
+              <TouchableOpacity onPress={() => { setSelectedSupplier(null); setCreditPurchases([]); }}>
+                <FontAwesome name="times" size={22} color="#aaa" />
+              </TouchableOpacity>
+            </View>
+
+            {selectedSupplier && (
+              <View style={styles.detailSummary}>
+                <View style={styles.detailSummaryItem}>
+                  <Text style={styles.detailSummaryVal}>{fmt(selectedSupplier.totalOwed)}</Text>
+                  <Text style={styles.detailSummaryLabel}>Total Owed</Text>
+                </View>
+                <View style={styles.detailSummaryItem}>
+                  <Text style={[styles.detailSummaryVal, { color: '#4CAF50' }]}>{fmt(selectedSupplier.totalPaid)}</Text>
+                  <Text style={styles.detailSummaryLabel}>Paid</Text>
+                </View>
+                <View style={styles.detailSummaryItem}>
+                  <Text style={[styles.detailSummaryVal, { color: '#FF9800' }]}>{fmt(selectedSupplier.balance)}</Text>
+                  <Text style={styles.detailSummaryLabel}>Balance</Text>
+                </View>
+              </View>
+            )}
+
+            {loadingSupplierDetail ? (
+              <ActivityIndicator size="large" color="#FF9800" style={{ marginTop: 20 }} />
+            ) : (
+              <FlatList
+                data={creditPurchases}
+                keyExtractor={(item) => item.id}
+                style={{ maxHeight: 400 }}
+                renderItem={({ item }) => (
+                  <View style={styles.saleCard}>
+                    <View style={styles.saleCardHeader}>
+                      <View style={{ backgroundColor: 'transparent', flex: 1 }}>
+                        <Text style={styles.saleCardDate}>{formatDate(item.created_at)}</Text>
+                        <Text style={styles.saleCardAmount}>Purchase: {fmt(item.total_amount)}</Text>
+                        <Text style={[styles.saleCardPaid, { color: item.balance > 0 ? '#FF9800' : '#4CAF50' }]}>
+                          Paid: {fmt(item.paid)} · Balance: {fmt(item.balance)}
+                        </Text>
+                      </View>
+                      <View style={{ backgroundColor: 'transparent', gap: 6 }}>
+                        {item.balance > 0 && (
+                          <TouchableOpacity style={[styles.payBtn, { backgroundColor: '#FF9800' }]} onPress={() => openSupplierPaymentModal(item)}>
+                            <FontAwesome name="money" size={14} color="#fff" />
+                            <Text style={styles.payBtnText}>Pay</Text>
+                          </TouchableOpacity>
+                        )}
+                        <TouchableOpacity style={styles.historyBtn} onPress={() => viewSupplierPaymentHistory(item.id)}>
+                          <FontAwesome name="history" size={12} color="#aaa" />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                    {item.paid > 0 && (
+                      <View style={styles.progressBar}>
+                        <View style={[styles.progressFill, { width: `${Math.min(100, (item.paid / item.total_amount) * 100)}%` }]} />
+                      </View>
+                    )}
+                  </View>
+                )}
+                ListEmptyComponent={
+                  <Text style={{ color: '#666', textAlign: 'center', marginTop: 20 }}>No credit purchases found</Text>
+                }
+              />
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* ═══ SUPPLIER PAYMENT MODAL ═══ */}
+      <Modal visible={showSupplierPayment} animationType="slide" transparent>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <ScrollView>
+              <Text style={styles.modalTitle}>Pay Supplier</Text>
+              {payingPurchase && (
+                <Text style={styles.payInfo}>
+                  Purchase balance: {fmt(payingPurchase.balance)}
+                </Text>
+              )}
+
+              <Text style={styles.label}>Amount *</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Payment amount"
+                placeholderTextColor="#555"
+                value={supplierPayAmount}
+                onChangeText={setSupplierPayAmount}
+                keyboardType="numeric"
+              />
+
+              <Text style={styles.label}>Payment Method</Text>
+              <View style={styles.chipRow}>
+                {PAYMENT_METHODS.filter(m => m.value !== 'credit').map((m) => (
+                  <TouchableOpacity
+                    key={m.value}
+                    style={[styles.chip, supplierPayMethod === m.value && styles.chipActive]}
+                    onPress={() => setSupplierPayMethod(m.value)}
+                  >
+                    <Text style={[styles.chipText, supplierPayMethod === m.value && { color: '#fff' }]}>
+                      {m.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={styles.label}>Note (optional)</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g. Partial payment"
+                placeholderTextColor="#555"
+                value={supplierPayNote}
+                onChangeText={setSupplierPayNote}
+              />
+
+              <TouchableOpacity
+                style={[styles.saveBtn, { backgroundColor: '#FF9800' }, savingSupplierPay && { opacity: 0.6 }]}
+                onPress={handleRecordSupplierPayment}
+                disabled={savingSupplierPay}
+              >
+                {savingSupplierPay ? <ActivityIndicator color="#fff" /> : (
+                  <Text style={styles.saveBtnText}>Record Payment</Text>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowSupplierPayment(false)}>
+                <Text style={styles.cancelBtnText}>Cancel</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* ═══ SUPPLIER PAYMENT HISTORY MODAL ═══ */}
+      <Modal visible={showSupplierHistory} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Payment History</Text>
+              <TouchableOpacity onPress={() => setShowSupplierHistory(false)}>
+                <FontAwesome name="times" size={22} color="#aaa" />
+              </TouchableOpacity>
+            </View>
+
+            <FlatList
+              data={supplierHistoryPayments}
+              keyExtractor={(item) => item.id}
+              style={{ maxHeight: 400 }}
+              renderItem={({ item }) => (
+                <View style={styles.historyCard}>
+                  <View style={{ backgroundColor: 'transparent', flex: 1 }}>
+                    <Text style={{ color: '#FF9800', fontSize: 16, fontWeight: 'bold' }}>{fmt(Number(item.amount))}</Text>
+                    <Text style={{ color: '#aaa', fontSize: 12, marginTop: 2 }}>
+                      {payMethodLabel(item.payment_method)} · {formatTime(item.created_at)}
+                    </Text>
+                    {item.note ? <Text style={{ color: '#888', fontSize: 12, marginTop: 2 }}>{item.note}</Text> : null}
+                  </View>
+                </View>
+              )}
+              ListEmptyComponent={
+                <Text style={{ color: '#666', textAlign: 'center', marginTop: 20 }}>No payments recorded yet</Text>
+              }
+            />
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#1a1a2e' },
+  tabRow: {
+    flexDirection: 'row', marginHorizontal: 16, marginTop: 12, marginBottom: 4,
+    backgroundColor: '#16213e', borderRadius: 12, padding: 4,
+  },
+  tab: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 6, paddingVertical: 10, borderRadius: 10,
+  },
+  tabActive: { backgroundColor: '#e94560' },
+  tabActivePayable: { backgroundColor: '#FF9800' },
+  tabText: { fontSize: 14, color: '#aaa', fontWeight: '600' },
+  tabTextActive: { color: '#fff' },
   summaryCard: {
     backgroundColor: '#16213e', margin: 16, borderRadius: 16, padding: 16,
     borderWidth: 1, borderColor: '#0f3460',

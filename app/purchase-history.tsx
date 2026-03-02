@@ -19,6 +19,9 @@ type PurchaseRow = {
   supplier_name: string | null;
   supplier_tin: string | null;
   total_amount: number;
+  payment_method: string;
+  status: string;
+  paid_amount: number;
   created_at: string;
   efris_submitted: boolean;
   seller_name: string;
@@ -52,7 +55,8 @@ export default function PurchaseHistoryScreen() {
       let query = supabase
         .from('purchases')
         .select(`
-          id, supplier_name, supplier_tin, total_amount, created_at, efris_submitted,
+          id, supplier_name, supplier_tin, total_amount, payment_method, status, paid_amount,
+          created_at, efris_submitted,
           created_by, branch_id,
           purchase_items(id)
         `)
@@ -107,6 +111,9 @@ export default function PurchaseHistoryScreen() {
         supplier_name: p.supplier_name || null,
         supplier_tin: p.supplier_tin || null,
         total_amount: Number(p.total_amount),
+        payment_method: p.payment_method || 'cash',
+        status: p.status || 'paid',
+        paid_amount: Number(p.paid_amount) || 0,
         created_at: p.created_at,
         efris_submitted: p.efris_submitted || false,
         seller_name: creatorMap[p.created_by] || '?',
@@ -230,7 +237,23 @@ export default function PurchaseHistoryScreen() {
                 <Text style={styles.cardMeta}>
                   {item.item_count} item{item.item_count !== 1 ? 's' : ''} · By {item.seller_name}
                 </Text>
-                {isAdmin && <Text style={styles.cardBranch}>📍 {item.branch_name}</Text>}
+                {item.payment_method === 'credit' && (
+                  <View style={[styles.efrisBadge, item.status === 'paid' ? styles.efrisOk : { backgroundColor: '#FF980030' }]}>
+                    <Text style={[styles.efrisBadgeText, { color: item.status === 'paid' ? '#4CAF50' : '#FF9800' }]}>
+                      {item.status === 'paid' ? '✅ Paid' : item.status === 'partial' ? '⏳ Partial' : '🔴 Unpaid'}
+                    </Text>
+                  </View>
+                )}
+                {item.payment_method !== 'credit' && (
+                  <View style={[styles.efrisBadge, { backgroundColor: '#4CAF5020' }]}>
+                    <Text style={[styles.efrisBadgeText, { color: '#4CAF50' }]}>
+                      {item.payment_method === 'cash' ? '💵 Cash' :
+                       item.payment_method === 'mobile_money' ? '📱 MoMo' :
+                       item.payment_method === 'bank' ? '🏦 Bank' : item.payment_method}
+                    </Text>
+                  </View>
+                )}
+                {isAdmin && <Text style={styles.cardBranch}>{'\u{1F4CD}'} {item.branch_name}</Text>}
                 {efrisEnabled && (
                   <View style={[styles.efrisBadge, item.efris_submitted ? styles.efrisOk : styles.efrisWarn]}>
                     <Text style={styles.efrisBadgeText}>{item.efris_submitted ? '✅ EFRIS' : '⚠️ Not submitted'}</Text>

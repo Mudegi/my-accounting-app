@@ -105,7 +105,11 @@ export default function PurchasesScreen() {
         business_id: business.id,
         branch_id: currentBranch.id,
         supplier_name: supplier.trim() || null,
+        supplier_id: selectedSupplierId || null,
         total_amount: total,
+        payment_method: purchasePayMethod,
+        status: purchasePayMethod === 'credit' ? 'unpaid' : 'paid',
+        paid_amount: purchasePayMethod === 'credit' ? 0 : total,
         created_by: profile.id,
       })
       .select()

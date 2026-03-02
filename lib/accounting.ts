@@ -259,7 +259,11 @@ export async function postPurchaseEntry(params: {
   userId?: string;
 }) {
   const { businessId, branchId, purchaseId, totalCost, vatAmount = 0, paymentMethod = 'cash', userId } = params;
-  const payAcct = PAYMENT_ACCOUNT_MAP[paymentMethod] || ACC.CASH;
+  // For credit purchases, credit Accounts Payable (we owe the supplier)
+  // For cash/momo/bank purchases, credit the payment asset account
+  const payAcct = paymentMethod === 'credit'
+    ? ACC.ACCOUNTS_PAYABLE
+    : (PAYMENT_ACCOUNT_MAP[paymentMethod] || ACC.CASH);
 
   const netCost = totalCost - vatAmount;
 
@@ -273,6 +277,32 @@ export async function postPurchaseEntry(params: {
   }
 
   return postJournalEntry(businessId, branchId, 'purchase', purchaseId, `Purchase #${purchaseId.slice(0, 8)}`, lines, userId);
+}
+
+// ════════════════════════════════════════════════════════════
+// AUTO-POST: SUPPLIER PAYMENT (pay down Accounts Payable)
+// ════════════════════════════════════════════════════════════
+// DR Accounts Payable   amount (reduce what we owe)
+// CR Cash/MoMo/Bank     amount (asset goes down)
+
+export async function postSupplierPaymentEntry(params: {
+  businessId: string;
+  branchId: string | null;
+  paymentId: string;
+  amount: number;
+  supplierName: string;
+  paymentMethod: string;
+  userId?: string;
+}) {
+  const { businessId, branchId, paymentId, amount, supplierName, paymentMethod, userId } = params;
+  const payAcct = PAYMENT_ACCOUNT_MAP[paymentMethod] || ACC.CASH;
+
+  const lines: JournalLine[] = [
+    { accountCode: ACC.ACCOUNTS_PAYABLE, debit: amount, description: `Payable cleared - ${supplierName}` },
+    { accountCode: payAcct, credit: amount, description: `Payment to supplier (${paymentMethod})` },
+  ];
+
+  return postJournalEntry(businessId, branchId, 'supplier_payment', paymentId, `Supplier payment: ${supplierName}`, lines, userId);
 }
 
 // ════════════════════════════════════════════════════════════
