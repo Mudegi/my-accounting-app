@@ -3,10 +3,8 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  TextInput,
   Alert,
   ActivityIndicator,
-  Linking,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
@@ -19,8 +17,6 @@ import {
   getPlans,
   getCurrentSubscription,
   getPaymentHistory,
-  initiatePayment,
-  confirmPayment,
   trialDaysRemaining,
   statusLabel,
   statusColor,
@@ -45,8 +41,6 @@ export default function SubscriptionScreen() {
   // Payment form
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
-  const [payMethod, setPayMethod] = useState('mtn_momo');
-  const [phoneNumber, setPhoneNumber] = useState('');
   const [processing, setProcessing] = useState(false);
 
   useEffect(() => {
@@ -77,82 +71,17 @@ export default function SubscriptionScreen() {
     setTab('payment');
   };
 
-  const handlePayment = async () => {
-    if (!selectedPlan || !business || !currentSub) return;
+  const handlePayment = () => {
+    if (!selectedPlan) return;
     const plan = plans.find((p) => p.id === selectedPlan);
     if (!plan) return;
+    const amount = billingCycle === 'yearly' ? plan.price_yearly : plan.price_monthly;
 
-    if ((payMethod === 'mtn_momo' || payMethod === 'airtel_money') && !phoneNumber) {
-      Alert.alert('Required', 'Please enter your mobile money number');
-      return;
-    }
-
-    setProcessing(true);
-    try {
-      const amount = billingCycle === 'yearly' ? plan.price_yearly : plan.price_monthly;
-
-      // 1. Create pending payment
-      const { payment, error: initErr } = await initiatePayment({
-        businessId: business.id,
-        subscriptionId: currentSub.id,
-        planId: selectedPlan,
-        amount,
-        currency: plan.currency,
-        paymentMethod: payMethod,
-        phoneNumber: phoneNumber || undefined,
-        billingCycle,
-      });
-
-      if (initErr || !payment) {
-        Alert.alert('Error', initErr?.message || 'Could not initiate payment');
-        setProcessing(false);
-        return;
-      }
-
-      // 2. Simulate payment processing
-      //    In production: call Flutterwave/MTN MoMo API here, then confirm on webhook
-      //    For now: auto-confirm after simulated delay
-      Alert.alert(
-        'Payment Initiated',
-        payMethod === 'mtn_momo' || payMethod === 'airtel_money'
-          ? `A payment prompt has been sent to ${phoneNumber}. Please approve it on your phone.\n\nAmount: ${formatCurrency(amount, plan.currency)}`
-          : `Please complete the payment of ${formatCurrency(amount, plan.currency)} via ${PAYMENT_METHOD_OPTIONS.find(o => o.value === payMethod)?.label || payMethod}.`,
-        [
-          {
-            text: 'I have paid',
-            onPress: async () => {
-              // Confirm payment
-              const { error: confErr } = await confirmPayment({
-                paymentId: payment.id,
-                businessId: business.id,
-                planId: selectedPlan,
-                billingCycle,
-                paymentReference: `SIM-${Date.now()}`,
-              });
-
-              if (confErr) {
-                Alert.alert('Error', confErr.message || 'Payment confirmation failed');
-              } else {
-                await refreshBusiness();
-                await refreshSubscription();
-                await loadData();
-                Alert.alert('Success! 🎉', `Your ${plan.display_name} plan is now active!`);
-                setTab('plans');
-              }
-              setProcessing(false);
-            },
-          },
-          {
-            text: 'Cancel',
-            style: 'cancel',
-            onPress: () => setProcessing(false),
-          },
-        ]
-      );
-    } catch (e: any) {
-      Alert.alert('Error', e.message);
-      setProcessing(false);
-    }
+    Alert.alert(
+      'Contact a Reseller',
+      `To subscribe to ${plan.display_name} (${formatCurrency(amount, plan.currency)}/${billingCycle === 'yearly' ? 'year' : 'month'}), please contact an authorized YourBooks reseller or our sales team.\n\nYour account will be activated once payment is confirmed.`,
+      [{ text: 'OK' }]
+    );
   };
 
   if (loading) {
@@ -284,47 +213,26 @@ export default function SubscriptionScreen() {
 
               {/* How to Pay */}
               <Text style={styles.label}>How to Pay</Text>
+              {/* How to Subscribe */}
               <View style={styles.sendMoneyCard}>
-                <Text style={styles.sendMoneyTitle}>Send Mobile Money to:</Text>
-                <View style={styles.phoneRow}>
-                  <FontAwesome name="phone" size={16} color="#FFCC00" />
-                  <Text style={styles.phoneNumber}>0770 546 489</Text>
-                  <Text style={styles.phoneName}>— Mudegi Emma (MTN)</Text>
-                </View>
-                <View style={styles.phoneRow}>
-                  <FontAwesome name="phone" size={16} color="#e94560" />
-                  <Text style={styles.phoneNumber}>0706 090 021</Text>
-                  <Text style={styles.phoneName}>— Mudegi Emma (Airtel)</Text>
-                </View>
+                <FontAwesome name="users" size={28} color="#00BCD4" style={{ marginBottom: 10 }} />
+                <Text style={styles.sendMoneyTitle}>Contact a Reseller</Text>
                 <Text style={styles.sendMoneyHint}>
-                  Send {formatCurrency(amount, plan.currency)} to either number above.
-                  When prompted for a reason, type your business name.
+                  To activate your subscription, contact an authorized YourBooks reseller or our sales team. They will process your payment and activate your account.
                 </Text>
+                <View style={styles.phoneRow}>
+                  <FontAwesome name="check-circle" size={14} color="#4CAF50" />
+                  <Text style={{ color: '#aaa', fontSize: 13 }}>Payment via Mobile Money, Bank, or Cash</Text>
+                </View>
+                <View style={styles.phoneRow}>
+                  <FontAwesome name="check-circle" size={14} color="#4CAF50" />
+                  <Text style={{ color: '#aaa', fontSize: 13 }}>Instant activation after payment</Text>
+                </View>
+                <View style={styles.phoneRow}>
+                  <FontAwesome name="check-circle" size={14} color="#4CAF50" />
+                  <Text style={{ color: '#aaa', fontSize: 13 }}>Resellers available across Uganda</Text>
+                </View>
               </View>
-
-              {/* Your phone number */}
-              <Text style={styles.label}>Your Phone Number (that you sent from)</Text>
-              <TextInput
-                style={styles.input}
-                value={phoneNumber}
-                onChangeText={setPhoneNumber}
-                placeholder="e.g. 0770 123 456"
-                placeholderTextColor="#555"
-                keyboardType="phone-pad"
-              />
-
-              {/* Reason / Reference */}
-              <Text style={styles.label}>Reason / Reference You Entered *</Text>
-              <TextInput
-                style={styles.input}
-                value={paymentReason}
-                onChangeText={setPaymentReason}
-                placeholder="e.g. MyShop Subscription"
-                placeholderTextColor="#555"
-              />
-              <Text style={{ color: '#888', fontSize: 11, marginTop: -6, marginBottom: 12 }}>
-                Enter the exact reason you typed when sending the money
-              </Text>
 
               {/* Summary */}
               <View style={styles.paymentSummary}>
@@ -333,15 +241,10 @@ export default function SubscriptionScreen() {
               </View>
 
               <TouchableOpacity
-                style={[styles.payButton, processing && { opacity: 0.6 }]}
+                style={styles.payButton}
                 onPress={handlePayment}
-                disabled={processing}
               >
-                {processing ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={styles.payButtonText}>I've Sent the Money</Text>
-                )}
+                <Text style={styles.payButtonText}>Contact Reseller</Text>
               </TouchableOpacity>
             </>
           );
@@ -434,15 +337,11 @@ const styles = StyleSheet.create({
   cycleSave: { color: '#4CAF50', fontSize: 12, marginTop: 2 },
 
   payMethodCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#16213e', padding: 14, borderRadius: 12, marginBottom: 8, borderWidth: 1, borderColor: '#0f3460' },
-  payMethodCardActive: { borderColor: '#e94560' },
-  payMethodText: { flex: 1, color: '#888', fontSize: 15 },
 
-  sendMoneyCard: { backgroundColor: '#0f3460', borderRadius: 14, padding: 16, borderWidth: 1, borderColor: '#e94560' },
-  sendMoneyTitle: { color: '#fff', fontSize: 15, fontWeight: 'bold', marginBottom: 12 },
-  phoneRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8, backgroundColor: 'transparent' },
-  phoneNumber: { color: '#fff', fontSize: 17, fontWeight: 'bold', letterSpacing: 1 },
-  phoneName: { color: '#aaa', fontSize: 13 },
-  sendMoneyHint: { color: '#4CAF50', fontSize: 12, marginTop: 8, lineHeight: 18 },
+  sendMoneyCard: { backgroundColor: '#0f3460', borderRadius: 14, padding: 16, borderWidth: 1, borderColor: '#0f3460' },
+  sendMoneyTitle: { color: '#fff', fontSize: 16, fontWeight: 'bold', marginBottom: 8 },
+  phoneRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 6, backgroundColor: 'transparent' },
+  sendMoneyHint: { color: '#aaa', fontSize: 13, marginBottom: 12, lineHeight: 20 },
 
   paymentSummary: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#16213e', padding: 16, borderRadius: 12, marginTop: 20, borderWidth: 1, borderColor: '#0f3460' },
   summaryLabel: { color: '#aaa', fontSize: 16 },

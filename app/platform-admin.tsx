@@ -39,7 +39,6 @@ type BusinessRow = {
   owner_email: string | null;
   plan_name: string | null;
   user_count: number;
-  pending_reason: string | null;
 };
 
 type PaymentRow = {
@@ -50,8 +49,6 @@ type PaymentRow = {
   currency: string;
   payment_method: string;
   payment_reference: string | null;
-  payment_reason: string | null;
-  phone_number: string | null;
   status: string;
   paid_at: string | null;
   created_at: string;
@@ -94,8 +91,7 @@ export default function PlatformAdminScreen() {
   const [extendDays, setExtendDays] = useState('30');
   const [extending, setExtending] = useState(false);
 
-  // Reason filter for businesses
-  const [reasonFilter, setReasonFilter] = useState('');
+  // Status filter for businesses
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
   // Guard
@@ -246,19 +242,13 @@ export default function PlatformAdminScreen() {
       const matchesSearch = !searchQuery ||
         b.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         b.owner_email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        b.owner_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        b.pending_reason?.toLowerCase().includes(searchQuery.toLowerCase());
-
-      // Reason filter
-      const matchesReason = !reasonFilter ||
-        b.pending_reason?.toLowerCase().includes(reasonFilter.toLowerCase());
+        b.owner_name?.toLowerCase().includes(searchQuery.toLowerCase());
 
       // Status filter
       const matchesStatus = statusFilter === 'all' ||
-        (statusFilter === 'pending' && b.pending_reason && b.subscription_status !== 'active' && b.subscription_status !== 'approved') ||
         b.subscription_status === statusFilter;
 
-      return matchesSearch && matchesReason && matchesStatus;
+      return matchesSearch && matchesStatus;
     }
   );
 
@@ -375,7 +365,6 @@ export default function PlatformAdminScreen() {
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingHorizontal: 12, marginBottom: 8, backgroundColor: 'transparent' }}>
             {[
               { key: 'all', label: 'All' },
-              { key: 'pending', label: '\u{1F4E9} Pending Reason' },
               { key: 'trial', label: 'Trial' },
               { key: 'approved', label: '\u2705 Approved' },
               { key: 'active', label: 'Active' },
@@ -390,17 +379,6 @@ export default function PlatformAdminScreen() {
               </TouchableOpacity>
             ))}
           </View>
-
-          {/* Reason filter */}
-          {statusFilter === 'pending' && (
-            <TextInput
-              style={[styles.searchInput, { marginTop: 0, borderColor: '#FF9800' }]}
-              placeholder="Filter by payment reason..."
-              placeholderTextColor="#555"
-              value={reasonFilter}
-              onChangeText={setReasonFilter}
-            />
-          )}
 
           <FlatList
             data={filteredBusinesses}
@@ -424,13 +402,6 @@ export default function PlatformAdminScreen() {
                       <Text style={{ color: '#777', fontSize: 11, marginTop: 2 }}>
                         Expires: {new Date(item.subscription_ends_at).toLocaleDateString()}
                       </Text>
-                    )}
-                    {item.pending_reason && (
-                      <View style={{ backgroundColor: '#FF980020', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, marginTop: 6, alignSelf: 'flex-start' }}>
-                        <Text style={{ color: '#FF9800', fontSize: 12, fontWeight: '600' }}>
-                          {'\u{1F4E9}'} Reason: "{item.pending_reason}"
-                        </Text>
-                      </View>
                     )}
                   </View>
                 </View>
@@ -490,14 +461,6 @@ export default function PlatformAdminScreen() {
                   <Text style={{ color: '#aaa', fontSize: 12 }}>
                     {paymentMethodLabel(item.payment_method)} · {new Date(item.created_at).toLocaleDateString()}
                   </Text>
-                  {item.phone_number && (
-                    <Text style={{ color: '#888', fontSize: 11, marginTop: 2 }}>{'\u{1F4F1}'} {item.phone_number}</Text>
-                  )}
-                  {item.payment_reason && (
-                    <View style={{ backgroundColor: '#FF980020', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2, marginTop: 4, alignSelf: 'flex-start' }}>
-                      <Text style={{ color: '#FF9800', fontSize: 11, fontWeight: '600' }}>Reason: "{item.payment_reason}"</Text>
-                    </View>
-                  )}
                   {item.payment_reference && (
                     <Text style={{ color: '#777', fontSize: 11, marginTop: 2 }} numberOfLines={1}>{item.payment_reference}</Text>
                   )}
