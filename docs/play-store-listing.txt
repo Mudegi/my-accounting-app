@@ -1,0 +1,94 @@
+═══════════════════════════════════════════════════════════════
+  GOOGLE PLAY STORE LISTING — YourBooks
+═══════════════════════════════════════════════════════════════
+
+
+───── SHORT DESCRIPTION (80 chars max) ─────
+
+POS, invoicing, inventory & accounting for small businesses in Uganda.
+
+
+───── LONG DESCRIPTION (4000 chars max) ─────
+
+YourBooks is a powerful yet simple point-of-sale and accounting app built for small and medium businesses in Uganda. Whether you run a retail shop, restaurant, pharmacy, salon, or wholesale business — YourBooks helps you manage sales, track inventory, and stay on top of your finances.
+
+📊 POINT OF SALE (POS)
+• Fast product search and barcode scanning
+• Cash, Mobile Money, Bank, and Credit payment methods
+• Instant digital receipts with QR codes
+• Discounts (percentage or fixed amount)
+• Customer and walk-in sales tracking
+
+📦 INVENTORY MANAGEMENT
+• Real-time stock levels across all branches
+• Low stock alerts — never run out of key products
+• Purchase orders with supplier tracking
+• Automatic AVCO (Average Cost) inventory valuation
+• Barcode support for quick product lookup
+
+💰 ACCOUNTING & REPORTS
+• Automatic double-entry bookkeeping
+• Profit & Loss, Trial Balance, and Balance Sheet reports
+• Track expenses by category
+• Cash register management with shift open/close
+• Sales targets and performance tracking
+• Export reports for tax filing
+
+🧾 INVOICING & RECEIPTS
+• Professional receipts with your business logo
+• Credit note and return management
+• EFRIS (URA Electronic Fiscal Receipting) integration ready
+• Tax-compliant invoicing for VAT-registered businesses
+
+👥 MULTI-BRANCH & TEAM
+• Manage multiple business locations from one account
+• Role-based access: Admin, Manager, Cashier
+• Branch-level inventory and sales reporting
+• Staff performance tracking
+
+📈 BUSINESS INSIGHTS
+• Dashboard with daily, weekly, and monthly summaries
+• Top-selling products analysis
+• Customer loyalty tracking
+• Debt management — track who owes you and who you owe
+• Accounts receivable and payable management
+
+🌍 BUILT FOR UGANDA
+• Supports UGX, USD, KES, and more currencies
+• EFRIS/URA fiscal compliance support
+• Works with MTN MoMo and Airtel Money payment tracking
+• Designed for the Ugandan business environment
+
+🔒 SECURE & RELIABLE
+• Your data is encrypted and securely stored in the cloud
+• Each business's data is completely isolated
+• Works offline for core POS functions
+• Regular automatic backups
+
+Get started with a free trial — no credit card required. Upgrade anytime through our authorized reseller network across Uganda.
+
+YourBooks — Your business, simplified.
+
+
+───── TAGS / KEYWORDS ─────
+
+POS, point of sale, accounting, inventory, Uganda, small business, invoicing,
+receipts, bookkeeping, mobile money, EFRIS, URA, stock management, sales,
+expenses, multi-branch, cashier, retail, shop management
+
+
+───── CATEGORY ─────
+
+Business
+
+
+───── CONTENT RATING ─────
+
+Everyone (complete the questionnaire → Utility / Business app, no violence,
+no user-generated content sharing, no mature themes)
+
+
+───── CONTACT DETAILS (for store listing) ─────
+
+Email: support@yourbooksapp.com
+Website: https://mudegi.github.io/my-accounting-app/ (GitHub Pages)
