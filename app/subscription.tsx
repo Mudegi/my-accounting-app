@@ -160,13 +160,36 @@ export default function SubscriptionScreen() {
               </View>
 
               <View style={styles.featureList}>
-                <Text style={styles.featureItem}>✓ Unlimited branches, users & products</Text>
-                <Text style={styles.featureItem}>✓ POS, Inventory & Receipts</Text>
-                <Text style={styles.featureItem}>✓ Reports, Expenses & Accounting</Text>
-                <Text style={styles.featureItem}>✓ Multi-branch support</Text>
-                <Text style={styles.featureItem}>✓ Credit Notes & Returns</Text>
-                {Array.isArray(plan.features) && plan.features.includes('efris') && plan.name !== 'free_trial' && (
-                  <Text style={[styles.featureItem, { color: '#4CAF50', fontWeight: '600' }]}>✓ EFRIS / URA Integration</Text>
+                {plan.name === 'free_trial' ? (
+                  <>
+                    <Text style={styles.featureItem}>✓ Full access to all features</Text>
+                    <Text style={styles.featureItem}>✓ POS, Inventory & Receipts</Text>
+                    <Text style={styles.featureItem}>✓ Reports, Accounting & Export</Text>
+                    <Text style={styles.featureItem}>✓ Unlimited branches & users</Text>
+                  </>
+                ) : plan.name === 'starter' ? (
+                  <>
+                    <Text style={styles.featureItem}>✓ POS & Sales</Text>
+                    <Text style={styles.featureItem}>✓ Basic Inventory</Text>
+                    <Text style={styles.featureItem}>✓ Digital Receipts</Text>
+                    <Text style={styles.featureItem}>✓ 1 Branch · 2 Users · 100 Products</Text>
+                  </>
+                ) : plan.name === 'basic' ? (
+                  <>
+                    <Text style={styles.featureItem}>✓ Everything in Starter</Text>
+                    <Text style={styles.featureItem}>✓ Reports & Expenses</Text>
+                    <Text style={styles.featureItem}>✓ Multi-branch support</Text>
+                    <Text style={styles.featureItem}>✓ Credit Notes & Returns</Text>
+                    <Text style={styles.featureItem}>✓ Unlimited branches, users & products</Text>
+                  </>
+                ) : (
+                  <>
+                    <Text style={styles.featureItem}>✓ Everything in Basic</Text>
+                    <Text style={styles.featureItem}>✓ Full Accounting (GL, P&L, Balance Sheet)</Text>
+                    <Text style={styles.featureItem}>✓ Tax Center & Data Export</Text>
+                    <Text style={styles.featureItem}>✓ Sales Targets & Analytics</Text>
+                    <Text style={styles.featureItem}>✓ Unlimited everything</Text>
+                  </>
                 )}
               </View>
 

@@ -70,7 +70,7 @@ const getGuideSections = (efris: boolean): GuideSection[] => [
         steps: [
           'Step 1: Enter your business name, phone number, and address.',
           'Step 2: Select your business currency (default is UGX — Ugandan Shilling).',
-          'Step 3: Choose a subscription plan — Free Trial (14 days), Basic (70,000/mo), or Pro (220,000/mo).',
+          'Step 3: Choose a subscription plan — Free Trial (14 days), Starter (30,000/mo), Basic (70,000/mo), or Pro (220,000/mo).',
           'Tap "Complete Setup" to finish. You\'ll be redirected to the main app.',
         ],
         tips: [
@@ -90,8 +90,9 @@ const getGuideSections = (efris: boolean): GuideSection[] => [
           'View your payment history at the bottom of the screen.',
         ],
         tips: [
-          efris ? 'Basic plan is ideal for small shops not required to use EFRIS.' : 'Basic plan is ideal for small shops.',
-          ...(efris ? ['Pro plan includes EFRIS fiscal invoicing for URA compliance.'] : []),
+          'Starter plan is great for small shops just getting started.',
+          'Basic plan adds reports, expenses, and multi-branch support.',
+          'Pro plan includes full accounting, tax center, and data export.',
           'Your free trial gives full Pro features for 14 days.',
         ],
       },
@@ -499,21 +500,15 @@ const getGuideSections = (efris: boolean): GuideSection[] => [
       },
       {
         title: 'EFRIS Configuration',
-        description: 'Set up your connection to URA\'s Electronic Fiscal Receipting and Invoicing System.',
+        description: 'EFRIS is configured by YourBooks support. Contact us to enable fiscal invoicing for your business.',
         steps: [
-          'Go to Settings tab (cog icon).',
-          'Scroll to the EFRIS section.',
-          'Toggle "Enable EFRIS" to turn on fiscal invoicing.',
-          'Enter your EFRIS API Key (provided by URA or your EFRIS middleware).',
-          'Optionally set a custom API URL (defaults to the standard endpoint).',
-          'Toggle "Test Mode" for testing without submitting real invoices.',
-          'Tap "Test Connection" to verify your API key works.',
-          'Tap "Save Config" to store the settings.',
+          'EFRIS is set up and managed by the YourBooks team.',
+          'Contact YourBooks support to discuss enabling EFRIS for your business.',
+          'Once enabled, every sale is automatically fiscalized with URA.',
         ],
         tips: [
-          'Get your EFRIS API key from URA\'s e-Tax portal or your EFRIS integration provider.',
-          'Always test in "Test Mode" first before going live.',
-          'EFRIS requires a Pro subscription plan.',
+          'EFRIS is optional — only needed if your business is VAT-registered.',
+          'Contact YourBooks support to get started with EFRIS.',
           'Products must be registered with EFRIS before they appear on fiscal receipts.',
         ],
         proOnly: true,
@@ -649,12 +644,10 @@ const getGuideSections = (efris: boolean): GuideSection[] => [
           'Subscription: See your current plan status and days remaining.',
           'Branch Selector: Switch between branches (if your business has multiple).',
           'App Mode: Toggle between Basic and Pro mode.',
-          ...(efris ? ['EFRIS Section: Configure API key, test connection, toggle test mode.'] : []),
           'Admin Links: Manage branches, users, and categories.',
         ],
         tips: [
           'Switch branches to view different branch data across the app.',
-          ...(efris ? ['Pro mode enables EFRIS fiscal invoicing — requires a Pro subscription.'] : []),
           'Use "Reload Profile" if your role or branch assignment was recently changed.',
         ],
       },
@@ -667,7 +660,6 @@ const getGuideSections = (efris: boolean): GuideSection[] => [
           'View all existing branches with their locations and phone numbers.',
           'Tap "Add Branch" to create a new location.',
           'Enter: branch name (required), location, and phone.',
-          ...(efris ? ['Toggle "EFRIS Enabled" if this branch should fiscalize invoices.'] : []),
           'Tap "Save" to create the branch.',
         ],
         tips: [
@@ -680,14 +672,12 @@ const getGuideSections = (efris: boolean): GuideSection[] => [
       {
         title: 'Product Categories',
         route: '/admin/categories',
-        description: efris
-          ? 'Organize products into categories with optional URA product codes for EFRIS.'
-          : 'Organize products into categories for easy browsing and filtering.',
+        description: 'Organize products into categories for easy browsing and filtering.',
         steps: [
           'Go to Settings → tap "Product Categories".',
           'View existing categories.',
           'Tap "Add Category" to create a new one.',
-          efris ? 'Enter the category name and optionally a URA product code.' : 'Enter the category name.',
+          'Enter the category name.',
           'Tap "Save" to create the category.',
         ],
         tips: [
@@ -707,7 +697,7 @@ const getGuideSections = (efris: boolean): GuideSection[] => [
 const getFaqs = (efris: boolean): { q: string; a: string }[] => [
   ...(efris ? [{
     q: 'What is EFRIS and do I need it?',
-    a: 'EFRIS (Electronic Fiscal Receipting and Invoicing System) is URA\'s system for tracking business transactions. If your business is VAT-registered, you are legally required to use EFRIS. YourBooks Lite integrates with EFRIS on the Pro plan — every sale is automatically fiscalized with URA.',
+    a: 'EFRIS (Electronic Fiscal Receipting and Invoicing System) is URA\'s system for tracking business transactions. If your business is VAT-registered, you may need EFRIS. Contact YourBooks support to discuss enabling it for your business — pricing is agreed on individually.',
   }] : []),
   {
     q: 'How do I file my VAT return with URA?',
@@ -729,9 +719,7 @@ const getFaqs = (efris: boolean): { q: string; a: string }[] => [
   },
   {
     q: 'What is the difference between Basic and Pro mode?',
-    a: efris
-      ? 'Basic mode (70,000/mo) is for businesses that don\'t need EFRIS — you get full POS, inventory, accounting, and reporting features. Pro mode (220,000/mo) adds EFRIS fiscal invoicing, meaning every sale is registered with URA for tax compliance.'
-      : 'Basic mode (70,000/mo) gives you full POS, inventory, accounting, and reporting features. Pro mode (220,000/mo) adds advanced features like fiscal invoicing and enhanced compliance tools.',
+    a: 'Starter (30,000/mo) gives you basic POS, inventory, and receipts. Basic (70,000/mo) adds reports, expenses, multi-branch support, and credit notes. Pro (220,000/mo) adds full accounting, tax center, data export, and sales analytics.',
   },
   {
     q: 'How do I handle product returns?',
@@ -927,7 +915,7 @@ export default function HelpScreen() {
               <View style={styles.refRow}><Text style={styles.refLabel}>Payment Methods:</Text><Text style={styles.refValue}>Cash, Mobile Money, Card, Bank, Credit</Text></View>
               <View style={styles.refRow}><Text style={styles.refLabel}>Tax Options:</Text><Text style={styles.refValue}>No Tax, 18% VAT, Zero Rated, Exempt</Text></View>
               <View style={styles.refRow}><Text style={styles.refLabel}>User Roles:</Text><Text style={styles.refValue}>Admin, Branch Manager, Salesperson</Text></View>
-              <View style={styles.refRow}><Text style={styles.refLabel}>Plans:</Text><Text style={styles.refValue}>Free Trial (14d), Basic (70K), Pro (220K)</Text></View>
+              <View style={styles.refRow}><Text style={styles.refLabel}>Plans:</Text><Text style={styles.refValue}>Free Trial (14d), Starter (30K), Basic (70K), Pro (220K)</Text></View>
               {efrisEnabled && (
                 <View style={styles.refRow}><Text style={styles.refLabel}>Buyer Types:</Text><Text style={styles.refValue}>B2B, B2C, Foreigner, B2G</Text></View>
               )}

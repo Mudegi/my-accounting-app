@@ -37,7 +37,6 @@ YourBooks is a powerful yet simple point-of-sale and accounting app built for sm
 🧾 INVOICING & RECEIPTS
 • Professional receipts with your business logo
 • Credit note and return management
-• EFRIS (URA Electronic Fiscal Receipting) integration ready
 • Tax-compliant invoicing for VAT-registered businesses
 
 👥 MULTI-BRANCH & TEAM
@@ -55,7 +54,7 @@ YourBooks is a powerful yet simple point-of-sale and accounting app built for sm
 
 🌍 BUILT FOR UGANDA
 • Supports UGX, USD, KES, and more currencies
-• EFRIS/URA fiscal compliance support
+• Tax-compliant invoicing support
 • Works with MTN MoMo and Airtel Money payment tracking
 • Designed for the Ugandan business environment
 
@@ -73,7 +72,7 @@ YourBooks — Your business, simplified.
 ───── TAGS / KEYWORDS ─────
 
 POS, point of sale, accounting, inventory, Uganda, small business, invoicing,
-receipts, bookkeeping, mobile money, EFRIS, URA, stock management, sales,
+receipts, bookkeeping, mobile money, URA, stock management, sales,
 expenses, multi-branch, cashier, retail, shop management
 
 

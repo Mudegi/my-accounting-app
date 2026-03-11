@@ -170,11 +170,12 @@ After your first sign-in, the app walks you through a 3-step setup:
 
 ### 2.3 Choosing a Subscription Plan
 
-| Plan | Price | EFRIS | Features |
-|------|-------|-------|----------|
-| **Free Trial** | Free for 14 days | Yes | Full access to all features |
-| **Basic** | UGX 70,000/month | No | POS, Inventory, Accounting, Reports — no EFRIS |
-| **Pro** | UGX 220,000/month | Yes | Everything in Basic + EFRIS fiscal invoicing |
+| Plan | Price | Features |
+|------|-------|----------|
+| **Free Trial** | Free for 14 days | Full access to all features |
+| **Starter** | UGX 30,000/month | POS, Basic Inventory, Receipts (1 branch, 2 users, 100 products) |
+| **Basic** | UGX 70,000/month | + Reports, Expenses, Multi-branch, Credit Notes (unlimited) |
+| **Pro** | UGX 220,000/month | + Full Accounting, Tax Center, Data Export (unlimited) |
 
 ---
 
@@ -1131,17 +1132,20 @@ Purchases are submitted to EFRIS as stock increase notifications, registering in
 
 ### Plans
 
-| Feature | Free Trial | Basic | Pro |
-|---------|-----------|-------|-----|
-| **Price** | Free (14 days) | 70,000 UGX/mo | 220,000 UGX/mo |
-| **POS & Sales** | ✅ | ✅ | ✅ |
-| **Inventory** | ✅ | ✅ | ✅ |
-| **Accounting** | ✅ | ✅ | ✅ |
-| **Reports** | ✅ | ✅ | ✅ |
-| **Multi-Branch** | ✅ | ✅ | ✅ |
-| **Data Export** | ✅ | ✅ | ✅ |
-| **EFRIS Invoicing** | ✅ | ❌ | ✅ |
-| **Tax Center** | ✅ | Basic | ✅ |
+| Feature | Free Trial | Starter | Basic | Pro |
+|---------|-----------|---------|-------|-----|
+| **Price** | Free (14 days) | 30,000 UGX/mo | 70,000 UGX/mo | 220,000 UGX/mo |
+| **POS & Sales** | ✅ | ✅ | ✅ | ✅ |
+| **Inventory** | ✅ | ✅ | ✅ | ✅ |
+| **Receipts** | ✅ | ✅ | ✅ | ✅ |
+| **Reports & Expenses** | ✅ | ❌ | ✅ | ✅ |
+| **Multi-Branch** | ✅ | ❌ | ✅ | ✅ |
+| **Credit Notes** | ✅ | ❌ | ✅ | ✅ |
+| **Full Accounting** | ✅ | ❌ | ❌ | ✅ |
+| **Tax Center & Export** | ✅ | ❌ | ❌ | ✅ |
+| **Branches** | Unlimited | 1 | Unlimited | Unlimited |
+| **Users** | Unlimited | 2 | Unlimited | Unlimited |
+| **Products** | Unlimited | 100 | Unlimited | Unlimited |
 
 ### Managing Your Subscription
 
@@ -1166,7 +1170,6 @@ Purchases are submitted to EFRIS as stock increase notifications, registering in
 | View all branches | ✅ | ❌ | ❌ |
 | Manage users | ✅ | ❌ | ❌ |
 | Manage branches | ✅ | ❌ | ❌ |
-| Configure EFRIS | ✅ | ❌ | ❌ |
 | Set sales targets | ✅ | ❌ | ❌ |
 | Stock transfers | ✅ | ✅ | ❌ |
 | Export data | ✅ | ✅ | ❌ |
@@ -1179,7 +1182,7 @@ Purchases are submitted to EFRIS as stock increase notifications, registering in
 A: Yes. YourBooks Lite stores all data in the cloud (Supabase). This ensures your data is always backed up and accessible from any device. If you lose connection, you'll see a "check your internet" warning.
 
 **Q: What is EFRIS and do I need it?**
-A: EFRIS is URA's Electronic Fiscal Receipting and Invoicing System. If your business is VAT-registered, you're legally required to use it. The Pro plan includes EFRIS integration. If you're not VAT-registered, you can use the Basic plan without EFRIS.
+A: EFRIS is URA's Electronic Fiscal Receipting and Invoicing System. If your business is VAT-registered, you may need it. Contact YourBooks support to discuss enabling EFRIS for your business — pricing is agreed on individually.
 
 **Q: How do I file my monthly VAT return?**
 A: Go to Export → select "VAT" → pick the month → tap Export. The CSV has your Output VAT (from sales), Input VAT (from purchases), Credit Note adjustments, and Net VAT Payable. Enter these figures on the URA web portal (efris.ura.go.ug).
@@ -1194,13 +1197,13 @@ A: YourBooks uses the AVCO (Average Cost) method. Each purchase recalculates the
 A: Yes. Create branches in Settings → Manage Branches. Each branch has separate inventory, sales, and expenses. Admins see all branches; staff see their assigned branch.
 
 **Q: How do I process a return?**
-A: Go to Credit Notes → search for the original sale → select items to return → choose a reason → submit. Inventory is restored, accounting entries are reversed, and the credit note is sent to EFRIS.
+A: Go to Credit Notes → search for the original sale → select items to return → choose a reason → submit. Inventory is restored and accounting entries are reversed.
 
 **Q: How do I export data for my accountant?**
 A: Go to Export → choose data type (Sales, Expenses, Inventory, etc.) → set date range → tap Export. A CSV file is generated that can be opened in Excel.
 
 **Q: What's the difference between Basic and Pro mode?**
-A: Basic = full POS, inventory, and accounting without EFRIS. Pro = everything in Basic plus EFRIS fiscal invoicing for URA compliance.
+A: Starter (30K/mo) gives basic POS, inventory, and receipts. Basic (70K/mo) adds reports, expenses, multi-branch, and credit notes. Pro (220K/mo) adds full accounting, tax center, and data export.
 
 **Q: Is my data safe?**
 A: Yes. All data is stored in Supabase (cloud database) with Row Level Security. Each business can only access its own data. Data is encrypted in transit and at rest.

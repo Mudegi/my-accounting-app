@@ -60,10 +60,11 @@ type PaymentRow = {
   created_at: string;
 };
 
-const PLANS = ['basic', 'pro'] as const;
+const PLANS = ['starter', 'basic', 'pro'] as const;
 const PLAN_LABELS: Record<string, string> = {
-  basic: 'Basic — 70K/mo (no EFRIS)',
-  pro: 'Pro — 220K/mo (with EFRIS)',
+  starter: 'Starter — 30K/mo',
+  basic: 'Basic — 70K/mo',
+  pro: 'Pro — 220K/mo',
 };
 
 export default function PlatformAdminScreen() {
@@ -86,7 +87,7 @@ export default function PlatformAdminScreen() {
   // Modal for activating a subscription
   const [activateModal, setActivateModal] = useState(false);
   const [selectedBiz, setSelectedBiz] = useState<BusinessRow | null>(null);
-  const [selectedPlan, setSelectedPlan] = useState<string>('starter');
+  const [selectedPlan, setSelectedPlan] = useState<string>('basic');
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
   const [cashAmount, setCashAmount] = useState('');
   const [notes, setNotes] = useState('');
