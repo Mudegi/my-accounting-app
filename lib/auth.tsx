@@ -5,6 +5,7 @@ import { supabase } from './supabase';
 import { Session, User } from '@supabase/supabase-js';
 import { loadCurrencies, getCurrency, formatCurrency, type Currency } from './currency';
 import { checkSubscription, type SubscriptionStatus } from './subscription';
+import { registerDeviceSession, removeDeviceSession, heartbeatSession } from './device-sessions';
 
 const IDLE_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
 const LAST_ACTIVE_KEY = '@yourbooks_last_active';
@@ -124,6 +125,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         } catch {}
         touchActivity();
+        // Heartbeat to keep session alive
+        heartbeatSession();
       } else if (nextState.match(/inactive|background/)) {
         // Going to background — stamp the time
         touchActivity();
@@ -215,6 +218,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } catch (e) {
           console.error('Currency/subscription load error:', e);
         }
+
+        // Enforce device limit
+        await enforceDeviceLimit(businessData.id);
       }
 
       // Load branches
@@ -251,6 +257,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
     if (!error) touchActivity();
     return { error };
+  };
+
+  // ── Device session enforcement: called after profile + business are loaded ──
+  const enforceDeviceLimit = async (bizId: string) => {
+    try {
+      const result = await registerDeviceSession(bizId);
+      if (!result.allowed) {
+        const { Alert } = require('react-native');
+        Alert.alert(
+          'Device Limit Reached',
+          `Your plan allows ${result.maxDevices} device${result.maxDevices === 1 ? '' : 's'}. ` +
+          `${result.activeCount} already active.\n\nPlease log out from another device or upgrade your plan.`,
+          [{ text: 'OK', onPress: () => supabase.auth.signOut() }]
+        );
+        return false;
+      }
+    } catch (e) {
+      console.error('Device limit check error:', e);
+    }
+    return true;
   };
 
   const signUp = async (email: string, password: string, fullName: string, businessName: string) => {
@@ -306,6 +332,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
+    await removeDeviceSession();
     await AsyncStorage.removeItem(LAST_ACTIVE_KEY);
     await supabase.auth.signOut();
   };

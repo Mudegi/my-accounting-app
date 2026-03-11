@@ -17,6 +17,7 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { statusLabel, statusColor, trialDaysRemaining } from '@/lib/subscription';
+import { getBusinessSessions, removeOtherSession, getDeviceId, type DeviceSession } from '@/lib/device-sessions';
 
 export default function SettingsScreen() {
   const { profile, business, branches, currentBranch, setCurrentBranch, signOut, refreshBusiness, reloadUserData, subscriptionStatus, currency, isSuperAdmin, changePassword } = useAuth();
@@ -28,10 +29,53 @@ export default function SettingsScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [changingPassword, setChangingPassword] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [showDevices, setShowDevices] = useState(false);
+  const [devices, setDevices] = useState<DeviceSession[]>([]);
+  const [loadingDevices, setLoadingDevices] = useState(false);
+  const [currentDeviceId, setCurrentDeviceId] = useState<string>('');
 
   useEffect(() => {
     AsyncStorage.getItem('auto_print').then(v => setAutoPrint(v === 'true'));
+    getDeviceId().then(id => setCurrentDeviceId(id));
   }, []);
+
+  const loadDevices = async () => {
+    if (!business) return;
+    setLoadingDevices(true);
+    const sessions = await getBusinessSessions(business.id);
+    setDevices(sessions);
+    setLoadingDevices(false);
+  };
+
+  const handleToggleDevices = () => {
+    const next = !showDevices;
+    setShowDevices(next);
+    if (next) loadDevices();
+  };
+
+  const handleRemoveDevice = (session: DeviceSession) => {
+    if (!business) return;
+    Alert.alert(
+      'Remove Device',
+      `Log out "${session.device_name}" (${session.user_name})?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            const ok = await removeOtherSession(session.id, business.id);
+            if (ok) {
+              Alert.alert('Done', 'Device session removed.');
+              loadDevices();
+            } else {
+              Alert.alert('Error', 'Could not remove session.');
+            }
+          },
+        },
+      ]
+    );
+  };
 
   const toggleAutoPrint = async (value: boolean) => {
     setAutoPrint(value);
@@ -347,6 +391,74 @@ export default function SettingsScreen() {
             )}
           </TouchableOpacity>
         </View>
+      )}
+
+      {/* Active Devices */}
+      {isAdmin && (
+        <>
+          <TouchableOpacity
+            style={[styles.signOutButton, { borderColor: '#FF980033', marginBottom: 10 }]}
+            onPress={handleToggleDevices}
+          >
+            <FontAwesome name="mobile-phone" size={22} color="#FF9800" />
+            <Text style={[styles.signOutText, { color: '#FF9800' }]}>Active Devices</Text>
+            <FontAwesome name={showDevices ? 'chevron-up' : 'chevron-down'} size={12} color="#FF9800" style={{ marginLeft: 'auto' }} />
+          </TouchableOpacity>
+
+          {showDevices && (
+            <View style={styles.changePasswordCard}>
+              {loadingDevices ? (
+                <ActivityIndicator color="#e94560" />
+              ) : devices.length === 0 ? (
+                <Text style={{ color: '#888', textAlign: 'center', fontSize: 13 }}>No active sessions found</Text>
+              ) : (
+                <>
+                  <Text style={{ color: '#aaa', fontSize: 12, marginBottom: 10 }}>
+                    {devices.length} active device{devices.length !== 1 ? 's' : ''}
+                  </Text>
+                  {devices.map((d) => {
+                    const isCurrent = d.device_id === currentDeviceId;
+                    const ago = Math.round((Date.now() - new Date(d.last_active_at).getTime()) / 60000);
+                    const agoLabel = ago < 1 ? 'Just now' : ago < 60 ? `${ago}m ago` : `${Math.round(ago / 60)}h ago`;
+                    return (
+                      <View key={d.id} style={{
+                        backgroundColor: '#0f3460',
+                        borderRadius: 10,
+                        padding: 12,
+                        marginBottom: 8,
+                        borderLeftWidth: isCurrent ? 3 : 0,
+                        borderLeftColor: '#4CAF50',
+                      }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'transparent' }}>
+                          <View style={{ flex: 1, backgroundColor: 'transparent' }}>
+                            <Text style={{ color: '#fff', fontWeight: '600', fontSize: 14 }}>
+                              <FontAwesome name={d.platform === 'ios' ? 'apple' : d.platform === 'android' ? 'android' : 'globe'} size={14} color="#aaa" />
+                              {'  '}{d.device_name}{isCurrent ? ' (This device)' : ''}
+                            </Text>
+                            <Text style={{ color: '#aaa', fontSize: 12, marginTop: 2 }}>
+                              {d.user_name} · {agoLabel}
+                            </Text>
+                          </View>
+                          {!isCurrent && isAdmin && (
+                            <TouchableOpacity
+                              onPress={() => handleRemoveDevice(d)}
+                              style={{ backgroundColor: '#8B1A1A', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6 }}
+                            >
+                              <Text style={{ color: '#fff', fontSize: 11, fontWeight: '600' }}>Log Out</Text>
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                      </View>
+                    );
+                  })}
+                  <TouchableOpacity onPress={loadDevices} style={{ alignSelf: 'center', marginTop: 4 }}>
+                    <Text style={{ color: '#FF9800', fontSize: 12 }}>Refresh</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+            </View>
+          )}
+        </>
       )}
 
       {/* Sign Out */}

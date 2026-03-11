@@ -45,6 +45,7 @@ type BusinessRow = {
   efris_api_key: string | null;
   efris_api_url: string | null;
   efris_test_mode: boolean;
+  active_devices: number;
 };
 
 type PaymentRow = {
@@ -109,6 +110,12 @@ export default function PlatformAdminScreen() {
   const [efrisTestMode, setEfrisTestMode] = useState(true);
   const [savingEfris, setSavingEfris] = useState(false);
   const [testingEfris, setTestingEfris] = useState(false);
+
+  // Sessions modal
+  const [sessionsModal, setSessionsModal] = useState(false);
+  const [sessionsBiz, setSessionsBiz] = useState<BusinessRow | null>(null);
+  const [sessionsList, setSessionsList] = useState<any[]>([]);
+  const [loadingSessions, setLoadingSessions] = useState(false);
 
   // Guard
   if (!isSuperAdmin) {
@@ -452,7 +459,7 @@ export default function PlatformAdminScreen() {
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4, backgroundColor: 'transparent' }}>
                       {statusBadge(item.subscription_status)}
                       <Text style={{ color: '#888', fontSize: 11 }}>
-                        {item.plan_name || 'No plan'} · {item.user_count} user{item.user_count !== 1 ? 's' : ''}
+                        {item.plan_name || 'No plan'} · {item.user_count} user{item.user_count !== 1 ? 's' : ''} · {item.active_devices || 0} device{(item.active_devices || 0) !== 1 ? 's' : ''}
                       </Text>
                     </View>
                     {item.subscription_ends_at && (
@@ -504,6 +511,20 @@ export default function PlatformAdminScreen() {
                   >
                     <FontAwesome name="file-text-o" size={12} color="#fff" />
                     <Text style={styles.actionBtnText}>{item.is_efris_enabled ? 'EFRIS ✓' : 'EFRIS'}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.actionBtn, { backgroundColor: (item.active_devices || 0) > 0 ? '#FF9800' : '#555' }]}
+                    onPress={async () => {
+                      setSessionsBiz(item);
+                      setSessionsModal(true);
+                      setLoadingSessions(true);
+                      const { data, error } = await supabase.rpc('admin_get_business_sessions', { p_business_id: item.id });
+                      setSessionsList(error ? [] : (data || []));
+                      setLoadingSessions(false);
+                    }}
+                  >
+                    <FontAwesome name="mobile-phone" size={14} color="#fff" />
+                    <Text style={styles.actionBtnText}>{item.active_devices || 0}</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -689,6 +710,75 @@ export default function PlatformAdminScreen() {
       </Modal>
 
       {/* ══════ EFRIS CONFIG MODAL ══════ */}
+
+      {/* ══════ DEVICE SESSIONS MODAL ══════ */}
+      <Modal visible={sessionsModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>📱 Active Devices</Text>
+            <Text style={styles.modalSubtitle}>{sessionsBiz?.name}</Text>
+
+            {loadingSessions ? (
+              <ActivityIndicator color="#e94560" style={{ marginVertical: 20 }} />
+            ) : sessionsList.length === 0 ? (
+              <Text style={{ color: '#888', textAlign: 'center', marginVertical: 20 }}>No active sessions</Text>
+            ) : (
+              <FlatList
+                data={sessionsList}
+                keyExtractor={(s) => s.id}
+                style={{ maxHeight: 300 }}
+                renderItem={({ item: s }) => {
+                  const ago = Math.round((Date.now() - new Date(s.last_active_at).getTime()) / 60000);
+                  const agoLabel = ago < 1 ? 'Just now' : ago < 60 ? `${ago}m ago` : `${Math.round(ago / 60)}h ago`;
+                  return (
+                    <View style={{ backgroundColor: '#0f3460', borderRadius: 10, padding: 12, marginBottom: 8 }}>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'transparent' }}>
+                        <View style={{ flex: 1, backgroundColor: 'transparent' }}>
+                          <Text style={{ color: '#fff', fontWeight: '600', fontSize: 13 }}>
+                            <FontAwesome name={s.platform === 'ios' ? 'apple' : s.platform === 'android' ? 'android' : 'globe'} size={13} color="#aaa" />
+                            {'  '}{s.device_name}
+                          </Text>
+                          <Text style={{ color: '#aaa', fontSize: 11, marginTop: 2 }}>
+                            {s.user_name} · {agoLabel}
+                          </Text>
+                        </View>
+                        <TouchableOpacity
+                          onPress={() => {
+                            Alert.alert('Terminate Session', `Remove ${s.device_name}?`, [
+                              { text: 'Cancel', style: 'cancel' },
+                              {
+                                text: 'Remove',
+                                style: 'destructive',
+                                onPress: async () => {
+                                  await supabase.rpc('admin_remove_device_session', {
+                                    p_session_id: s.id,
+                                    p_business_id: sessionsBiz!.id,
+                                  });
+                                  setSessionsList(prev => prev.filter(x => x.id !== s.id));
+                                },
+                              },
+                            ]);
+                          }}
+                          style={{ backgroundColor: '#8B1A1A', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6 }}
+                        >
+                          <Text style={{ color: '#fff', fontSize: 11, fontWeight: '600' }}>Remove</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  );
+                }}
+              />
+            )}
+
+            <TouchableOpacity
+              style={[styles.modalCancel, { marginTop: 16 }]}
+              onPress={() => setSessionsModal(false)}
+            >
+              <Text style={{ color: '#fff', fontWeight: '600' }}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
       <Modal visible={efrisModal} transparent animationType="slide">
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <View style={styles.modalOverlay}>
