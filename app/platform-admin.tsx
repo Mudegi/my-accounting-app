@@ -11,12 +11,14 @@ import {
   Modal,
   KeyboardAvoidingView,
   Platform,
+  Switch,
 } from 'react-native';
 import { Text, View } from '@/components/Themed';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useFocusEffect, useRouter } from 'expo-router';
+import { testEfrisConnection } from '@/lib/efris';
 
 type PlatformStats = {
   total_businesses: number;
@@ -39,6 +41,10 @@ type BusinessRow = {
   owner_email: string | null;
   plan_name: string | null;
   user_count: number;
+  is_efris_enabled: boolean;
+  efris_api_key: string | null;
+  efris_api_url: string | null;
+  efris_test_mode: boolean;
 };
 
 type PaymentRow = {
@@ -93,6 +99,15 @@ export default function PlatformAdminScreen() {
 
   // Status filter for businesses
   const [statusFilter, setStatusFilter] = useState<string>('all');
+
+  // EFRIS config modal
+  const [efrisModal, setEfrisModal] = useState(false);
+  const [efrisEnabled, setEfrisEnabled] = useState(false);
+  const [efrisApiKey, setEfrisApiKey] = useState('');
+  const [efrisApiUrl, setEfrisApiUrl] = useState('');
+  const [efrisTestMode, setEfrisTestMode] = useState(true);
+  const [savingEfris, setSavingEfris] = useState(false);
+  const [testingEfris, setTestingEfris] = useState(false);
 
   // Guard
   if (!isSuperAdmin) {
@@ -234,6 +249,47 @@ export default function PlatformAdminScreen() {
         },
       ]
     );
+  };
+
+  // ── Open EFRIS modal for a business ──
+  const openEfrisModal = (biz: BusinessRow) => {
+    setSelectedBiz(biz);
+    setEfrisEnabled(biz.is_efris_enabled ?? false);
+    setEfrisApiKey(biz.efris_api_key ?? '');
+    setEfrisApiUrl(biz.efris_api_url ?? '');
+    setEfrisTestMode(biz.efris_test_mode ?? true);
+    setEfrisModal(true);
+  };
+
+  // ── Save EFRIS config for selected business ──
+  const handleSaveEfris = async () => {
+    if (!selectedBiz) return;
+    setSavingEfris(true);
+    try {
+      const { error } = await supabase.from('businesses').update({
+        is_efris_enabled: efrisEnabled,
+        efris_api_key: efrisApiKey.trim() || null,
+        efris_api_url: efrisApiUrl.trim() || null,
+        efris_test_mode: efrisTestMode,
+      }).eq('id', selectedBiz.id);
+      if (error) throw error;
+      Alert.alert('✅ Saved', `EFRIS config updated for ${selectedBiz.name}`);
+      setEfrisModal(false);
+      await loadBusinesses();
+    } catch (e: any) {
+      Alert.alert('Error', e.message);
+    } finally {
+      setSavingEfris(false);
+    }
+  };
+
+  // ── Test EFRIS connection ──
+  const handleTestEfris = async () => {
+    if (!efrisApiKey.trim()) { Alert.alert('Error', 'Enter an API Key first'); return; }
+    setTestingEfris(true);
+    const ok = await testEfrisConnection(efrisApiKey.trim(), efrisApiUrl.trim() || undefined);
+    setTestingEfris(false);
+    Alert.alert(ok ? '✅ Connected' : '❌ Failed', ok ? 'EFRIS API is reachable.' : 'Could not connect. Check the API key and URL.');
   };
 
   const filteredBusinesses = businesses.filter(
@@ -437,6 +493,13 @@ export default function PlatformAdminScreen() {
                       <Text style={styles.actionBtnText}>Cancel</Text>
                     </TouchableOpacity>
                   )}
+                  <TouchableOpacity
+                    style={[styles.actionBtn, { backgroundColor: item.is_efris_enabled ? '#4CAF50' : '#533483' }]}
+                    onPress={() => openEfrisModal(item)}
+                  >
+                    <FontAwesome name="file-text-o" size={12} color="#fff" />
+                    <Text style={styles.actionBtnText}>{item.is_efris_enabled ? 'EFRIS ✓' : 'EFRIS'}</Text>
+                  </TouchableOpacity>
                 </View>
               </View>
             )}
@@ -616,6 +679,103 @@ export default function PlatformAdminScreen() {
               </TouchableOpacity>
             </View>
           </View>
+        </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* ══════ EFRIS CONFIG MODAL ══════ */}
+      <Modal visible={efrisModal} transparent animationType="slide">
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+        <View style={styles.modalOverlay}>
+          <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 20 }}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>🇺🇬 EFRIS Configuration</Text>
+            <Text style={styles.modalSubtitle}>{selectedBiz?.name}</Text>
+
+            {/* EFRIS toggle */}
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, backgroundColor: 'transparent' }}>
+              <View style={{ flex: 1, backgroundColor: 'transparent' }}>
+                <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600' }}>
+                  {efrisEnabled ? '✅ EFRIS Enabled' : '⭕ EFRIS Disabled'}
+                </Text>
+                <Text style={{ color: '#888', fontSize: 11, marginTop: 2 }}>
+                  {efrisEnabled ? 'Receipts are URA-compliant' : 'Internal use only — not URA compliant'}
+                </Text>
+              </View>
+              <Switch
+                value={efrisEnabled}
+                onValueChange={setEfrisEnabled}
+                trackColor={{ false: '#333', true: '#4CAF50' }}
+                thumbColor={efrisEnabled ? '#fff' : '#666'}
+              />
+            </View>
+
+            {efrisEnabled && (
+              <>
+                {/* API Key */}
+                <Text style={styles.formLabel}>EFRIS API Key</Text>
+                <TextInput
+                  style={styles.modalInput}
+                  placeholder="Organization API key"
+                  placeholderTextColor="#555"
+                  value={efrisApiKey}
+                  onChangeText={setEfrisApiKey}
+                  secureTextEntry
+                />
+
+                {/* API URL */}
+                <Text style={styles.formLabel}>API URL (optional)</Text>
+                <TextInput
+                  style={styles.modalInput}
+                  placeholder="Leave blank for default middleware URL"
+                  placeholderTextColor="#555"
+                  value={efrisApiUrl}
+                  onChangeText={setEfrisApiUrl}
+                  autoCapitalize="none"
+                  keyboardType="url"
+                />
+
+                {/* Environment toggle */}
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, backgroundColor: 'transparent' }}>
+                  <View style={{ flex: 1, backgroundColor: 'transparent' }}>
+                    <Text style={{ color: '#fff', fontSize: 13, fontWeight: '600' }}>Environment</Text>
+                    <Text style={{ color: '#888', fontSize: 11, marginTop: 2 }}>
+                      {efrisTestMode ? 'Test / Sandbox — No real URA submissions' : '🟢 PRODUCTION — Live URA submissions'}
+                    </Text>
+                  </View>
+                  <Switch
+                    value={efrisTestMode}
+                    onValueChange={setEfrisTestMode}
+                    trackColor={{ false: '#e94560', true: '#4CAF50' }}
+                    thumbColor="#fff"
+                  />
+                </View>
+
+                {/* Test Connection */}
+                <TouchableOpacity
+                  style={{ backgroundColor: '#1a1a2e', borderWidth: 1, borderColor: '#7C3AED', borderRadius: 10, padding: 12, alignItems: 'center', marginBottom: 12 }}
+                  onPress={handleTestEfris}
+                  disabled={testingEfris}
+                >
+                  {testingEfris ? <ActivityIndicator color="#7C3AED" size="small" /> : <Text style={{ color: '#7C3AED', fontWeight: '700', fontSize: 14 }}>Test Connection</Text>}
+                </TouchableOpacity>
+              </>
+            )}
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity style={styles.modalCancel} onPress={() => setEfrisModal(false)}>
+                <Text style={{ color: '#fff' }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalConfirm} onPress={handleSaveEfris} disabled={savingEfris}>
+                {savingEfris ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={{ color: '#fff', fontWeight: '700' }}>💾 Save EFRIS Config</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+          </ScrollView>
         </View>
         </KeyboardAvoidingView>
       </Modal>

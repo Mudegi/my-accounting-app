@@ -13,7 +13,6 @@ import {
 import { Text, View } from '@/components/Themed';
 import { useAuth } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
-import { testEfrisConnection } from '@/lib/efris';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -24,10 +23,6 @@ export default function SettingsScreen() {
   const router = useRouter();
   const [efrisEnabled, setEfrisEnabled] = useState(business?.is_efris_enabled ?? false);
   const [proMode, setProMode] = useState(business?.app_mode === 'pro');
-  const [efrisApiKey, setEfrisApiKey] = useState(business?.efris_api_key ?? '');
-  const [efrisApiUrl, setEfrisApiUrl] = useState(business?.efris_api_url ?? '');
-  const [efrisTestMode, setEfrisTestMode] = useState(business?.efris_test_mode ?? true);
-  const [testingConnection, setTestingConnection] = useState(false);
   const [autoPrint, setAutoPrint] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [newPassword, setNewPassword] = useState('');
@@ -42,50 +37,6 @@ export default function SettingsScreen() {
   const toggleAutoPrint = async (value: boolean) => {
     setAutoPrint(value);
     await AsyncStorage.setItem('auto_print', value ? 'true' : 'false');
-  };
-
-  const toggleEfris = async (value: boolean) => {
-    if (!business) return;
-    setEfrisEnabled(value);
-    const { error } = await supabase
-      .from('businesses')
-      .update({ is_efris_enabled: value })
-      .eq('id', business.id);
-    if (error) {
-      setEfrisEnabled(!value);
-      Alert.alert('Error', `Failed to save: ${error.message}`);
-      return;
-    }
-    await refreshBusiness();
-    Alert.alert(
-      value ? 'EFRIS Enabled' : 'EFRIS Disabled',
-      value
-        ? 'Receipts will now be fiscalized through URA.'
-        : 'Receipts are for internal use only (not URA compliant).'
-    );
-  };
-
-  const saveEfrisConfig = async () => {
-    if (!business) return;
-    const { error } = await supabase.from('businesses').update({
-      efris_api_key: efrisApiKey.trim() || null,
-      efris_api_url: efrisApiUrl.trim() || null,
-      efris_test_mode: efrisTestMode,
-    }).eq('id', business.id);
-    if (error) {
-      Alert.alert('Error', `Failed to save config: ${error.message}`);
-      return;
-    }
-    await refreshBusiness();
-    Alert.alert('Saved', 'EFRIS configuration updated.');
-  };
-
-  const handleTestConnection = async () => {
-    if (!efrisApiKey.trim()) { Alert.alert('Error', 'Enter an API Key first'); return; }
-    setTestingConnection(true);
-    const ok = await testEfrisConnection(efrisApiKey.trim(), efrisApiUrl.trim() || undefined);
-    setTestingConnection(false);
-    Alert.alert(ok ? '✅ Connected' : '❌ Failed', ok ? 'EFRIS API is reachable.' : 'Could not connect. Check your API key and URL.');
   };
 
   const toggleMode = async (value: boolean) => {
@@ -278,7 +229,7 @@ export default function SettingsScreen() {
         </View>
       )}
 
-      {/* EFRIS Settings (Admin Only) */}
+      {/* EFRIS Status (read-only — configured by platform admin) */}
       {isAdmin && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>EFRIS (URA Compliance)</Text>
@@ -290,45 +241,9 @@ export default function SettingsScreen() {
               <Text style={styles.settingSubLabel}>
                 {efrisEnabled
                   ? 'Receipts are URA-compliant'
-                  : 'For internal use only — not URA compliant'}
+                  : 'EFRIS is managed by YourBooks support'}
               </Text>
             </View>
-            <Switch
-              value={efrisEnabled}
-              onValueChange={toggleEfris}
-              trackColor={{ false: '#333', true: '#4CAF50' }}
-              thumbColor={efrisEnabled ? '#fff' : '#666'}
-            />
-          </View>
-        </View>
-      )}
-
-      {/* EFRIS Configuration (only when enabled) */}
-      {isAdmin && efrisEnabled && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>🇺🇬 EFRIS CONFIGURATION</Text>
-          <View style={styles.field}>
-            <Text style={styles.fieldLabel}>EFRIS API Key</Text>
-            <TextInput style={styles.fieldInput} placeholder="Your organization API key" placeholderTextColor="#555" value={efrisApiKey} onChangeText={setEfrisApiKey} secureTextEntry />
-          </View>
-          <View style={styles.field}>
-            <Text style={styles.fieldLabel}>API URL (optional)</Text>
-            <TextInput style={styles.fieldInput} placeholder="Leave blank for default middleware URL" placeholderTextColor="#555" value={efrisApiUrl} onChangeText={setEfrisApiUrl} autoCapitalize="none" keyboardType="url" />
-          </View>
-          <View style={styles.settingRow}>
-            <View style={styles.settingInfo}>
-              <Text style={styles.settingLabel}>Environment</Text>
-              <Text style={styles.settingSubLabel}>{efrisTestMode ? 'Test / Sandbox — No real URA submissions' : '🟢 PRODUCTION — Live URA submissions'}</Text>
-            </View>
-            <Switch value={efrisTestMode} onValueChange={setEfrisTestMode} trackColor={{ false: '#e94560', true: '#4CAF50' }} thumbColor="#fff" />
-          </View>
-          <View style={styles.efrisButtons}>
-            <TouchableOpacity style={styles.efrisSaveBtn} onPress={saveEfrisConfig}>
-              <Text style={styles.efrisSaveText}>Save Config</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.efrisTestBtn} onPress={handleTestConnection} disabled={testingConnection}>
-              {testingConnection ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.efrisTestText}>Test Connection</Text>}
-            </TouchableOpacity>
           </View>
         </View>
       )}
