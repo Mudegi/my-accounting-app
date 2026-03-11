@@ -19,6 +19,7 @@ import { useAuth } from '@/lib/auth';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { testEfrisConnection } from '@/lib/efris';
+import { getPlatformContacts, updatePlatformSetting, invalidatePlatformContacts } from '@/lib/platform-settings';
 
 type PlatformStats = {
   total_businesses: number;
@@ -117,6 +118,12 @@ export default function PlatformAdminScreen() {
   const [sessionsList, setSessionsList] = useState<any[]>([]);
   const [loadingSessions, setLoadingSessions] = useState(false);
 
+  // Contact info settings
+  const [contactPhone, setContactPhone] = useState('');
+  const [contactWhatsapp, setContactWhatsapp] = useState('');
+  const [contactEmail, setContactEmail] = useState('');
+  const [savingContacts, setSavingContacts] = useState(false);
+
   // Guard
   if (!isSuperAdmin) {
     return (
@@ -130,9 +137,15 @@ export default function PlatformAdminScreen() {
 
   const loadDashboard = async () => {
     try {
-      const { data, error } = await supabase.rpc('admin_platform_stats');
-      if (error) throw error;
-      setStats(data as PlatformStats);
+      const [statsResult, contacts] = await Promise.all([
+        supabase.rpc('admin_platform_stats'),
+        getPlatformContacts(),
+      ]);
+      if (statsResult.error) throw statsResult.error;
+      setStats(statsResult.data as PlatformStats);
+      setContactPhone(contacts.contact_phone);
+      setContactWhatsapp(contacts.contact_whatsapp);
+      setContactEmail(contacts.contact_email);
     } catch (e: any) {
       Alert.alert('Error', e.message);
     }
@@ -412,6 +425,61 @@ export default function PlatformAdminScreen() {
               <Text style={styles.revenueAmount}>{fmt(stats?.this_month_revenue ?? 0)}</Text>
               <Text style={styles.revenueLabel}>This Month</Text>
             </View>
+          </View>
+
+          {/* Contact Info Settings */}
+          <Text style={[styles.sectionTitle, { marginTop: 16 }]}>📞 Contact Info</Text>
+          <Text style={{ color: '#888', fontSize: 12, marginBottom: 10 }}>Shown to businesses on subscription &amp; help screens</Text>
+          <View style={{ backgroundColor: '#16213e', borderRadius: 12, padding: 14, marginBottom: 10 }}>
+            <Text style={styles.formLabel}>Phone Number</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="e.g. +256 700 123456"
+              placeholderTextColor="#555"
+              value={contactPhone}
+              onChangeText={setContactPhone}
+              keyboardType="phone-pad"
+            />
+            <Text style={styles.formLabel}>WhatsApp Number</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="e.g. 256700123456 (no + or spaces)"
+              placeholderTextColor="#555"
+              value={contactWhatsapp}
+              onChangeText={setContactWhatsapp}
+              keyboardType="phone-pad"
+            />
+            <Text style={styles.formLabel}>Email Address</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="e.g. sales@yourbooks.app"
+              placeholderTextColor="#555"
+              value={contactEmail}
+              onChangeText={setContactEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+            />
+            <TouchableOpacity
+              style={[styles.modalConfirm, { marginTop: 4 }]}
+              onPress={async () => {
+                setSavingContacts(true);
+                invalidatePlatformContacts();
+                await Promise.all([
+                  updatePlatformSetting('contact_phone', contactPhone.trim()),
+                  updatePlatformSetting('contact_whatsapp', contactWhatsapp.trim()),
+                  updatePlatformSetting('contact_email', contactEmail.trim()),
+                ]);
+                setSavingContacts(false);
+                Alert.alert('✅ Saved', 'Contact info updated. Businesses will see this immediately.');
+              }}
+              disabled={savingContacts}
+            >
+              {savingContacts ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <Text style={{ color: '#fff', fontWeight: '700' }}>💾 Save Contacts</Text>
+              )}
+            </TouchableOpacity>
           </View>
         </ScrollView>
       ) : tab === 'businesses' ? (

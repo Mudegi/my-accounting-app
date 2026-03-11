@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   StyleSheet,
   TouchableOpacity,
@@ -8,11 +8,13 @@ import {
   LayoutAnimation,
   Platform,
   UIManager,
+  Linking,
 } from 'react-native';
 import { Text, View } from '@/components/Themed';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/lib/auth';
+import { getPlatformContacts, type PlatformContacts } from '@/lib/platform-settings';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -752,6 +754,11 @@ export default function HelpScreen() {
   const [expandedScreen, setExpandedScreen] = useState<string | null>(null);
   const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<'guide' | 'faq'>('guide');
+  const [contacts, setContacts] = useState<PlatformContacts>({ contact_phone: '', contact_whatsapp: '', contact_email: '' });
+
+  useEffect(() => {
+    getPlatformContacts().then(setContacts);
+  }, []);
 
   const toggleSection = (id: string) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -959,7 +966,25 @@ export default function HelpScreen() {
         <View style={styles.footer}>
           <Text style={styles.footerText}>YourBooks Lite v1.0</Text>
           <Text style={styles.footerText}>Made for Uganda small businesses</Text>
-          <Text style={styles.footerSub}>Need help? Contact support@yourbooks.app</Text>
+          <Text style={{ color: '#aaa', fontSize: 11, marginTop: 4 }}>Need help? Reach out:</Text>
+          {contacts.contact_phone ? (
+            <TouchableOpacity onPress={() => Linking.openURL(`tel:${contacts.contact_phone}`)} style={{ marginTop: 4 }}>
+              <Text style={{ color: '#4CAF50', fontSize: 12 }}>📞 {contacts.contact_phone}</Text>
+            </TouchableOpacity>
+          ) : null}
+          {contacts.contact_whatsapp ? (
+            <TouchableOpacity onPress={() => Linking.openURL(`https://wa.me/${contacts.contact_whatsapp}`)} style={{ marginTop: 3 }}>
+              <Text style={{ color: '#25D366', fontSize: 12 }}>💬 WhatsApp</Text>
+            </TouchableOpacity>
+          ) : null}
+          {contacts.contact_email ? (
+            <TouchableOpacity onPress={() => Linking.openURL(`mailto:${contacts.contact_email}`)} style={{ marginTop: 3 }}>
+              <Text style={{ color: '#2196F3', fontSize: 12 }}>✉️ {contacts.contact_email}</Text>
+            </TouchableOpacity>
+          ) : null}
+          {!contacts.contact_phone && !contacts.contact_whatsapp && !contacts.contact_email && (
+            <Text style={styles.footerSub}>Contact your YourBooks reseller for support</Text>
+          )}
         </View>
       </ScrollView>
     </View>

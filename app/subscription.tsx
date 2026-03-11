@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Linking,
 } from 'react-native';
 import { Text, View } from '@/components/Themed';
 import { useAuth } from '@/lib/auth';
@@ -25,6 +26,7 @@ import {
   type Subscription,
   type Payment,
 } from '@/lib/subscription';
+import { getPlatformContacts, type PlatformContacts } from '@/lib/platform-settings';
 
 type Tab = 'plans' | 'payment' | 'history';
 
@@ -42,6 +44,7 @@ export default function SubscriptionScreen() {
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
   const [processing, setProcessing] = useState(false);
+  const [contacts, setContacts] = useState<PlatformContacts>({ contact_phone: '', contact_whatsapp: '', contact_email: '' });
 
   useEffect(() => {
     loadData();
@@ -50,14 +53,16 @@ export default function SubscriptionScreen() {
   const loadData = async () => {
     if (!business) return;
     setLoading(true);
-    const [plansData, subData, payData] = await Promise.all([
+    const [plansData, subData, payData, contactsData] = await Promise.all([
       getPlans(),
       getCurrentSubscription(business.id),
       getPaymentHistory(business.id),
+      getPlatformContacts(),
     ]);
     setPlans(plansData);
     setCurrentSub(subData);
     setPayments(payData);
+    setContacts(contactsData);
     setLoading(false);
   };
 
@@ -79,7 +84,10 @@ export default function SubscriptionScreen() {
 
     Alert.alert(
       'Contact a Reseller',
-      `To subscribe to ${plan.display_name} (${formatCurrency(amount, plan.currency)}/${billingCycle === 'yearly' ? 'year' : 'month'}), please contact an authorized YourBooks reseller or our sales team.\n\nYour account will be activated once payment is confirmed.`,
+      `To subscribe to ${plan.display_name} (${formatCurrency(amount, plan.currency)}/${billingCycle === 'yearly' ? 'year' : 'month'}), please contact an authorized YourBooks reseller or our sales team.\n\nYour account will be activated once payment is confirmed.` +
+        (contacts.contact_phone ? `\n\n📞 ${contacts.contact_phone}` : '') +
+        (contacts.contact_whatsapp ? `\n💬 WhatsApp: ${contacts.contact_whatsapp}` : '') +
+        (contacts.contact_email ? `\n✉️ ${contacts.contact_email}` : ''),
       [{ text: 'OK' }]
     );
   };
@@ -243,7 +251,37 @@ export default function SubscriptionScreen() {
                 <Text style={styles.sendMoneyHint}>
                   To activate your subscription, contact an authorized YourBooks reseller or our sales team. They will process your payment and activate your account.
                 </Text>
-                <View style={styles.phoneRow}>
+
+                {/* Contact details */}
+                {contacts.contact_phone ? (
+                  <TouchableOpacity
+                    style={styles.phoneRow}
+                    onPress={() => Linking.openURL(`tel:${contacts.contact_phone}`)}
+                  >
+                    <FontAwesome name="phone" size={16} color="#4CAF50" />
+                    <Text style={{ color: '#4CAF50', fontSize: 14, fontWeight: '600' }}>{contacts.contact_phone}</Text>
+                  </TouchableOpacity>
+                ) : null}
+                {contacts.contact_whatsapp ? (
+                  <TouchableOpacity
+                    style={styles.phoneRow}
+                    onPress={() => Linking.openURL(`https://wa.me/${contacts.contact_whatsapp}`)}
+                  >
+                    <FontAwesome name="whatsapp" size={18} color="#25D366" />
+                    <Text style={{ color: '#25D366', fontSize: 14, fontWeight: '600' }}>Chat on WhatsApp</Text>
+                  </TouchableOpacity>
+                ) : null}
+                {contacts.contact_email ? (
+                  <TouchableOpacity
+                    style={styles.phoneRow}
+                    onPress={() => Linking.openURL(`mailto:${contacts.contact_email}`)}
+                  >
+                    <FontAwesome name="envelope" size={14} color="#2196F3" />
+                    <Text style={{ color: '#2196F3', fontSize: 14, fontWeight: '600' }}>{contacts.contact_email}</Text>
+                  </TouchableOpacity>
+                ) : null}
+
+                <View style={[styles.phoneRow, { marginTop: 8 }]}>
                   <FontAwesome name="check-circle" size={14} color="#4CAF50" />
                   <Text style={{ color: '#aaa', fontSize: 13 }}>Payment via Mobile Money, Bank, or Cash</Text>
                 </View>
