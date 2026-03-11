@@ -465,26 +465,30 @@ export default function PlatformAdminScreen() {
 
                 {/* Actions */}
                 <View style={styles.bizActions}>
-                  <TouchableOpacity
-                    style={[styles.actionBtn, { backgroundColor: '#2d6a4f' }]}
-                    onPress={() => {
-                      setSelectedBiz(item);
-                      setActivateModal(true);
-                    }}
-                  >
-                    <FontAwesome name="check-circle" size={12} color="#fff" />
-                    <Text style={styles.actionBtnText}>Activate</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.actionBtn, { backgroundColor: '#0f3460' }]}
-                    onPress={() => {
-                      setSelectedBiz(item);
-                      setExtendModal(true);
-                    }}
-                  >
-                    <FontAwesome name="calendar-plus-o" size={12} color="#fff" />
-                    <Text style={styles.actionBtnText}>Extend</Text>
-                  </TouchableOpacity>
+                  {item.subscription_status !== 'active' && item.subscription_status !== 'approved' && (
+                    <TouchableOpacity
+                      style={[styles.actionBtn, { backgroundColor: '#2d6a4f' }]}
+                      onPress={() => {
+                        setSelectedBiz(item);
+                        setActivateModal(true);
+                      }}
+                    >
+                      <FontAwesome name="check-circle" size={12} color="#fff" />
+                      <Text style={styles.actionBtnText}>Activate</Text>
+                    </TouchableOpacity>
+                  )}
+                  {(item.subscription_status === 'active' || item.subscription_status === 'approved' || item.subscription_status === 'trial') && (
+                    <TouchableOpacity
+                      style={[styles.actionBtn, { backgroundColor: '#0f3460' }]}
+                      onPress={() => {
+                        setSelectedBiz(item);
+                        setExtendModal(true);
+                      }}
+                    >
+                      <FontAwesome name="calendar-plus-o" size={12} color="#fff" />
+                      <Text style={styles.actionBtnText}>Extend</Text>
+                    </TouchableOpacity>
+                  )}
                   {(item.subscription_status === 'active' || item.subscription_status === 'approved' || item.subscription_status === 'trial') && (
                     <TouchableOpacity
                       style={[styles.actionBtn, { backgroundColor: '#8B1A1A' }]}
