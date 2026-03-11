@@ -1,7 +1,7 @@
 # YourBooks Lite — User Guide & Documentation
 
 **Version 1.0 | For Uganda Small Businesses**
-**POS · Inventory · Accounting · EFRIS · Tax Compliance**
+**POS · Inventory · Accounting · Tax Compliance**
 
 ---
 
@@ -55,7 +55,7 @@
     - 10.3 Monthly Totals
 11. [Customers](#11-customers)
     - 11.1 Adding a Customer
-    - 11.2 EFRIS Buyer Types
+    - 11.2 Buyer Types
     - 11.3 Customer TIN
 12. [Suppliers](#12-suppliers)
 13. [Sales History](#13-sales-history)
@@ -64,7 +64,7 @@
     - 13.3 Viewing Receipts
 14. [Credit Notes / Returns](#14-credit-notes--returns)
     - 14.1 Issuing a Credit Note
-    - 14.2 EFRIS Credit Note Submission
+    - 14.2 Credit Note Submission
     - 14.3 VAT Reversal
 15. [Customer Debts (Credit Sales)](#15-customer-debts)
     - 15.1 How Credit Sales Work
@@ -104,9 +104,9 @@
     - 25.2 Chart of Accounts
     - 25.3 AVCO Cost Method
     - 25.4 Automatic Journal Entries
-26. [EFRIS Integration](#26-efris-integration)
+26. [EFRIS Integration (Optional)](#26-efris-integration)
     - 26.1 What is EFRIS?
-    - 26.2 Setting Up EFRIS
+    - 26.2 Enabling EFRIS
     - 26.3 Fiscalizing Sales
     - 26.4 Registering Products
     - 26.5 Credit Notes
@@ -125,7 +125,7 @@
 - **Point of Sale (POS)** — Sell products with barcode scanning, discounts, multiple payment methods, and automatic receipts.
 - **Inventory Management** — Track stock quantities, costs, and reorder levels across multiple branches.
 - **Double-Entry Accounting** — Automatic journal entries for every transaction (sales, purchases, expenses, returns).
-- **EFRIS Integration** — Direct connection to URA's Electronic Fiscal Receipting and Invoicing System for tax compliance.
+- **EFRIS Integration** — Optional connection to URA's Electronic Fiscal Receipting and Invoicing System (available on request — contact YourBooks support).
 - **Tax Reporting** — VAT returns, income tax estimates, and CSV exports ready for URA filing.
 - **Multi-Branch Support** — Manage multiple business locations from a single account.
 
@@ -188,7 +188,7 @@ YourBooks Lite has **4 main tabs** at the bottom of the screen:
 | **Sell** | 🛒 Shopping Cart | Point of Sale — make sales |
 | **Inventory** | 📦 Cube | View and manage products/stock |
 | **Dashboard** | 📊 Bar Chart | Business overview, quick actions, reports |
-| **Settings** | ⚙️ Cog | Configuration, EFRIS, branches, profile |
+| **Settings** | ⚙️ Cog | Configuration, branches, profile |
 
 Additional screens are accessed through buttons and links on these tabs.
 
@@ -333,7 +333,7 @@ Products are sorted by quantity (lowest first) so low-stock items appear at the 
    - **Selling Price** — The price you sell at (tax-exclusive)
    - **Unit** — Pieces, Kg, Litres, Metres, etc.
    - **Tax Category** — Standard (18% VAT), Zero Rated, Exempt, or Excise Duty
-   - **EFRIS Unit** — The EFRIS unit code mapping (required for fiscal invoicing)
+   - **EFRIS Unit** — The EFRIS unit code mapping (shown if EFRIS is enabled for your business)
    - **Image** — Upload a product photo from your gallery
 3. Tap **"Save"** to create the product.
 
@@ -352,7 +352,7 @@ Products are sorted by quantity (lowest first) so low-stock items appear at the 
 
 ### 5.6 EFRIS Product Registration
 
-If your business uses EFRIS (Pro plan):
+If EFRIS has been enabled for your business by YourBooks support:
 1. After saving a product, a **"Register with EFRIS"** button appears.
 2. Tap it to submit the product to URA's EFRIS system.
 3. This must be done before the product can appear on fiscalized invoices.
@@ -452,23 +452,16 @@ If your business has multiple branches:
 
 ### 7.4 App Mode (Basic / Pro)
 
-- **Basic Mode** — Standard POS and accounting without EFRIS.
-- **Pro Mode** — Enables EFRIS fiscal invoicing for URA compliance.
+- **Basic Mode** — Standard POS and accounting.
+- **Pro Mode** — Enables full accounting, tax center, and advanced features.
 
 Toggle the switch to change modes. Pro mode requires a Pro subscription.
 
 ### 7.5 EFRIS Configuration
 
-If you're on the Pro plan and want to connect to URA EFRIS:
+EFRIS is configured and managed by the YourBooks support team. If your business needs EFRIS for URA compliance, contact YourBooks support to discuss enabling it. Once enabled, all sales are automatically fiscalized.
 
-1. **Enable EFRIS** — Toggle the switch ON.
-2. **API Key** — Enter the EFRIS API key provided by URA or your EFRIS integration middleware.
-3. **API URL** — Custom endpoint URL (optional — defaults to the standard middleware).
-4. **Test Mode** — Toggle ON to test without submitting real invoices to URA. Toggle OFF when you're ready to go live.
-5. Tap **"Test Connection"** to verify your API key and URL work.
-6. Tap **"Save Config"** to store the settings.
-
-> **Important:** Always test in Test Mode first before going live. Once Test Mode is OFF, all invoices are submitted to URA and cannot be undone.
+> **Note:** EFRIS is optional. Most businesses do not need EFRIS unless they are VAT-registered with URA.
 
 ### 7.6 Auto-Print Receipts
 
@@ -502,7 +495,7 @@ Before submitting, select a supplier:
 
 ### 8.3 EFRIS Stock Increase
 
-If EFRIS is enabled, the purchase is automatically submitted to URA as a **Stock Increase**. This registers the incoming goods in the fiscal system.
+If EFRIS has been enabled for your business, the purchase is automatically submitted to URA as a **Stock Increase**. This registers the incoming goods in the fiscal system.
 
 ### 8.4 Accounting Entry
 
@@ -524,7 +517,7 @@ The cost price is used to update the product's **Average Cost Price** using the 
 5. Tap any purchase to see the full breakdown:
    - Supplier name and TIN
    - All purchased items with quantity and unit cost
-   - EFRIS submission status and timestamp
+   - EFRIS submission status and timestamp (if EFRIS is enabled)
    - Total amount
 
 ---
@@ -577,9 +570,9 @@ The top of the Expenses screen shows your total expenses for the current month. 
    - **Email** — Email address
    - **Address** — Physical address
    - **Contact Person** — Name of contact (for businesses)
-   - **Buyer Type** — EFRIS classification
+   - **Buyer Type** — Classification for invoicing (B2B, B2C, etc.)
 
-### 11.2 EFRIS Buyer Types
+### 11.2 Buyer Types
 
 | Type | Code | When to Use |
 |------|------|-------------|
@@ -591,7 +584,7 @@ The top of the Expenses screen shows your total expenses for the current month. 
 ### 11.3 Customer TIN
 
 For **B2B** customers, entering their TIN is important because:
-- It appears on the fiscal invoice for EFRIS compliance
+- It appears on invoices and fiscal receipts
 - It shows in your VAT export data for URA filing
 - URA may require TINs for VAT deduction verification
 
@@ -606,7 +599,7 @@ Suppliers are the businesses or individuals you buy stock from.
 3. Enter: Name (required), TIN, Phone, Email, Address, Contact Person.
 4. Tap **"Save"**.
 
-Suppliers appear in the dropdown when recording purchases. Their TIN is included in EFRIS stock increase submissions and VAT input reports.
+Suppliers appear in the dropdown when recording purchases. Their TIN is included in stock purchase submissions and VAT input reports.
 
 ---
 
@@ -625,7 +618,7 @@ Suppliers appear in the dropdown when recording purchases. Their TIN is included
 
 Tap any sale to see the full details:
 - **Header:** Total, subtotal, tax, discount, payment method, status
-- **EFRIS info:** Fiscalization status, FDN (Fiscal Document Number), invoice number
+- **Fiscal info:** Fiscalization status, FDN, invoice number (if EFRIS is enabled)
 - **Customer:** Name, TIN, buyer type
 - **Items:** Each line item with quantity, unit price, cost price, and tax rate
 
@@ -645,16 +638,16 @@ Credit notes are used to process customer returns and reverse a previous sale (f
 2. Search for the original sale by invoice number or browse recent sales.
 3. Tap the sale you want to return items from.
 4. Select the items being returned and enter the return quantities.
-5. Choose a **Return Reason Code** (required by EFRIS):
+5. Choose a **Return Reason Code**:
    - Defective goods
    - Wrong item delivered
    - Customer dissatisfaction
    - (and other URA-defined reasons)
 6. Tap **"Submit Credit Note"**.
 
-### 14.2 EFRIS Credit Note Submission
+### 14.2 Credit Note Submission
 
-If EFRIS is enabled, the credit note is automatically submitted to URA with:
+If EFRIS is enabled for your business, the credit note is automatically submitted to URA with:
 - Reference to the original invoice
 - Returned items with quantities
 - Return reason code
@@ -877,7 +870,7 @@ Four compliance items are checked:
 | Item | What It Checks | How to Fix |
 |------|---------------|-----------|
 | **Business TIN** | Is your TIN set? | Go to Settings → update business details |
-| **EFRIS Connected** | Is EFRIS enabled and configured? | Go to Settings → EFRIS section |
+| **EFRIS Connected** | Is EFRIS enabled? (Optional — contact support) | Managed by YourBooks support |
 | **Unfiscalized Sales** | Sales not submitted to EFRIS | These need to be submitted via EFRIS |
 | **Missing TINs** | Sales to B2B customers without TIN | Update customer records with TINs |
 
@@ -1076,23 +1069,21 @@ Every transaction creates automatic journal entries:
 
 ---
 
-## 26. EFRIS Integration
+## 26. EFRIS Integration (Optional)
+
+> **Note:** EFRIS is an optional service. Most businesses do not need EFRIS unless they are VAT-registered with URA. EFRIS is not visible in the app unless it has been enabled for your business by YourBooks support.
 
 ### 26.1 What is EFRIS?
 
-**EFRIS** (Electronic Fiscal Receipting and Invoicing System) is URA's mandatory system for tracking business transactions. If your business is VAT-registered in Uganda, you're legally required to fiscalize invoices through EFRIS.
+**EFRIS** (Electronic Fiscal Receipting and Invoicing System) is URA's system for tracking business transactions. If your business is VAT-registered in Uganda, you may need to fiscalize invoices through EFRIS. Contact YourBooks support to discuss whether EFRIS is right for your business.
 
-### 26.2 Setting Up EFRIS
+### 26.2 Enabling EFRIS
 
-1. Subscribe to the **Pro plan**.
-2. Go to Settings → toggle **Pro Mode** ON.
-3. In the EFRIS section:
-   - Toggle **"Enable EFRIS"** ON
-   - Enter your **API Key**
-   - Enter your **API URL** (if using a custom middleware)
-   - Start with **Test Mode ON**
-   - Tap **"Test Connection"**
-4. If the test succeeds, you're ready. Turn **Test Mode OFF** when going live.
+EFRIS is set up and managed by the YourBooks team:
+1. Contact YourBooks support to request EFRIS activation.
+2. Agree on pricing and provide your URA/EFRIS API credentials.
+3. The YourBooks team configures EFRIS for your business.
+4. Once enabled, all sales are automatically fiscalized.
 
 ### 26.3 Fiscalizing Sales
 
