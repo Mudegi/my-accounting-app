@@ -21,7 +21,6 @@ import { statusLabel, statusColor, trialDaysRemaining } from '@/lib/subscription
 export default function SettingsScreen() {
   const { profile, business, branches, currentBranch, setCurrentBranch, signOut, refreshBusiness, reloadUserData, subscriptionStatus, currency, isSuperAdmin, changePassword } = useAuth();
   const router = useRouter();
-  const [efrisEnabled, setEfrisEnabled] = useState(business?.is_efris_enabled ?? false);
   const [proMode, setProMode] = useState(business?.app_mode === 'pro');
   const [autoPrint, setAutoPrint] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
@@ -225,25 +224,6 @@ export default function SettingsScreen() {
               trackColor={{ false: '#333', true: '#533483' }}
               thumbColor={proMode ? '#fff' : '#666'}
             />
-          </View>
-        </View>
-      )}
-
-      {/* EFRIS Status (read-only — configured by platform admin) */}
-      {isAdmin && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>EFRIS (URA Compliance)</Text>
-          <View style={styles.settingRow}>
-            <View style={styles.settingInfo}>
-              <Text style={styles.settingLabel}>
-                {efrisEnabled ? '✅ EFRIS Enabled' : '⭕ EFRIS Disabled'}
-              </Text>
-              <Text style={styles.settingSubLabel}>
-                {efrisEnabled
-                  ? 'Receipts are URA-compliant'
-                  : 'EFRIS is managed by YourBooks support'}
-              </Text>
-            </View>
           </View>
         </View>
       )}
