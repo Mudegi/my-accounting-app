@@ -1,6 +1,7 @@
 -- ═══════════════════════════════════════════════════════════════
 -- MIGRATION: Move EFRIS controls to Super Admin
 -- Adds EFRIS fields to admin_list_businesses RPC
+-- Adds admin_update_efris_config RPC for super admin EFRIS toggling
 -- ═══════════════════════════════════════════════════════════════
 
 DROP FUNCTION IF EXISTS admin_list_businesses();
@@ -60,5 +61,34 @@ BEGIN
   ) sub ON true
   LEFT JOIN subscription_plans sp ON sp.id = sub.plan_id
   ORDER BY b.id, b.created_at DESC;
+END;
+$$;
+
+-- ============================================================
+-- RPC: admin_update_efris_config
+-- Allows super admin to enable/disable EFRIS and update config
+-- for any business, bypassing RLS.
+-- ============================================================
+CREATE OR REPLACE FUNCTION admin_update_efris_config(
+  p_business_id UUID,
+  p_is_efris_enabled BOOLEAN,
+  p_efris_api_key TEXT DEFAULT NULL,
+  p_efris_api_url TEXT DEFAULT NULL,
+  p_efris_test_mode BOOLEAN DEFAULT true
+) RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  IF NOT is_super_admin() THEN
+    RAISE EXCEPTION 'Access denied: super admin only';
+  END IF;
+
+  UPDATE businesses SET
+    is_efris_enabled = p_is_efris_enabled,
+    efris_api_key = p_efris_api_key,
+    efris_api_url = p_efris_api_url,
+    efris_test_mode = p_efris_test_mode
+  WHERE id = p_business_id;
 END;
 $$;

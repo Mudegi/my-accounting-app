@@ -287,12 +287,13 @@ export default function PlatformAdminScreen() {
     if (!selectedBiz) return;
     setSavingEfris(true);
     try {
-      const { error } = await supabase.from('businesses').update({
-        is_efris_enabled: efrisEnabled,
-        efris_api_key: efrisApiKey.trim() || null,
-        efris_api_url: efrisApiUrl.trim() || null,
-        efris_test_mode: efrisTestMode,
-      }).eq('id', selectedBiz.id);
+      const { error } = await supabase.rpc('admin_update_efris_config', {
+        p_business_id: selectedBiz.id,
+        p_is_efris_enabled: efrisEnabled,
+        p_efris_api_key: efrisApiKey.trim() || null,
+        p_efris_api_url: efrisApiUrl.trim() || null,
+        p_efris_test_mode: efrisTestMode,
+      });
       if (error) throw error;
       Alert.alert('✅ Saved', `EFRIS config updated for ${selectedBiz.name}`);
       setEfrisModal(false);
