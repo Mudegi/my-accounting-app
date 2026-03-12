@@ -983,7 +983,7 @@ export default function HelpScreen() {
             </TouchableOpacity>
           ) : null}
           {!contacts.contact_phone && !contacts.contact_whatsapp && !contacts.contact_email && (
-            <Text style={styles.footerSub}>Contact your YourBooks reseller for support</Text>
+            <Text style={styles.footerSub}>Contact the YourBooks sales team for support</Text>
           )}
         </View>
       </ScrollView>

@@ -83,8 +83,8 @@ export default function SubscriptionScreen() {
     const amount = billingCycle === 'yearly' ? plan.price_yearly : plan.price_monthly;
 
     Alert.alert(
-      'Contact a Reseller',
-      `To subscribe to ${plan.display_name} (${formatCurrency(amount, plan.currency)}/${billingCycle === 'yearly' ? 'year' : 'month'}), please contact an authorized YourBooks reseller or our sales team.\n\nYour account will be activated once payment is confirmed.` +
+      'Contact Sales Team',
+      `To subscribe to ${plan.display_name} (${formatCurrency(amount, plan.currency)}/${billingCycle === 'yearly' ? 'year' : 'month'}), please contact our YourBooks sales team.\n\nYour account will be activated once payment is confirmed.` +
         (contacts.contact_phone ? `\n\n📞 ${contacts.contact_phone}` : '') +
         (contacts.contact_whatsapp ? `\n💬 WhatsApp: ${contacts.contact_whatsapp}` : '') +
         (contacts.contact_email ? `\n✉️ ${contacts.contact_email}` : ''),
@@ -247,9 +247,9 @@ export default function SubscriptionScreen() {
               {/* How to Subscribe */}
               <View style={styles.sendMoneyCard}>
                 <FontAwesome name="users" size={28} color="#00BCD4" style={{ marginBottom: 10 }} />
-                <Text style={styles.sendMoneyTitle}>Contact a Reseller</Text>
+                <Text style={styles.sendMoneyTitle}>Contact Sales Team</Text>
                 <Text style={styles.sendMoneyHint}>
-                  To activate your subscription, contact an authorized YourBooks reseller or our sales team. They will process your payment and activate your account.
+                  To activate your subscription, contact our YourBooks sales team. They will process your payment and activate your account.
                 </Text>
 
                 {/* Contact details */}
@@ -291,7 +291,7 @@ export default function SubscriptionScreen() {
                 </View>
                 <View style={styles.phoneRow}>
                   <FontAwesome name="check-circle" size={14} color="#4CAF50" />
-                  <Text style={{ color: '#aaa', fontSize: 13 }}>Resellers available across Uganda</Text>
+                  <Text style={{ color: '#aaa', fontSize: 13 }}>Sales team available across Uganda</Text>
                 </View>
               </View>
 
@@ -305,7 +305,7 @@ export default function SubscriptionScreen() {
                 style={styles.payButton}
                 onPress={handlePayment}
               >
-                <Text style={styles.payButtonText}>Contact Reseller</Text>
+                <Text style={styles.payButtonText}>Contact Sales Team</Text>
               </TouchableOpacity>
             </>
           );
