@@ -16,6 +16,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useFocusEffect } from 'expo-router';
+import { exportData, importData } from '@/lib/import-export';
 
 type Supplier = {
   id: string;
@@ -41,6 +42,8 @@ export default function SuppliersScreen() {
   const [contactPerson, setContactPerson] = useState('');
   const [saving, setSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [exporting, setExporting] = useState(false);
+  const [importing, setImporting] = useState(false);
 
   const load = useCallback(async () => {
     if (!business) return;
@@ -113,6 +116,47 @@ export default function SuppliersScreen() {
     ]);
   };
 
+  const handleExport = async (format: 'csv' | 'xlsx') => {
+    if (!business) return;
+    setExporting(true);
+    try {
+      const headers = ['Name', 'TIN', 'Phone', 'Email', 'Address', 'Contact Person'];
+      const rows = suppliers.map(s => [s.name, s.tin || '', s.phone || '', s.email || '', s.address || '', s.contact_person || '']);
+      await exportData(business.name, 'Suppliers', headers, rows, format);
+    } catch (e: any) {
+      Alert.alert('Export Error', e.message);
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleImport = async () => {
+    if (!business) return;
+    setImporting(true);
+    try {
+      const rows = await importData(['Name']);
+      if (!rows) { setImporting(false); return; }
+      const toInsert = rows.filter(r => (r['Name'] || '').trim()).map(r => ({
+        business_id: business.id,
+        name: r['Name'].trim(),
+        tin: (r['TIN'] || '').trim() || null,
+        phone: (r['Phone'] || '').trim() || null,
+        email: (r['Email'] || '').trim() || null,
+        address: (r['Address'] || '').trim() || null,
+        contact_person: (r['Contact Person'] || '').trim() || null,
+      }));
+      if (toInsert.length === 0) { Alert.alert('No Data', 'No valid rows found.'); setImporting(false); return; }
+      const { error } = await supabase.from('suppliers').insert(toInsert);
+      if (error) throw error;
+      Alert.alert('Import Complete', `${toInsert.length} supplier(s) imported.`);
+      load();
+    } catch (e: any) {
+      Alert.alert('Import Error', e.message);
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const filtered = searchQuery.trim()
     ? suppliers.filter(s =>
         s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -133,6 +177,22 @@ export default function SuppliersScreen() {
         />
         <TouchableOpacity style={styles.addBtn} onPress={openNew}>
           <FontAwesome name="plus" size={16} color="#fff" />
+        </TouchableOpacity>
+      </View>
+
+      {/* Export / Import */}
+      <View style={styles.ioBar}>
+        <TouchableOpacity style={styles.ioBtn} onPress={() => handleExport('csv')} disabled={exporting}>
+          {exporting ? <ActivityIndicator size="small" color="#4CAF50" /> : <FontAwesome name="file-text-o" size={14} color="#4CAF50" />}
+          <Text style={styles.ioBtnText}>CSV</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.ioBtn} onPress={() => handleExport('xlsx')} disabled={exporting}>
+          <FontAwesome name="file-excel-o" size={14} color="#2196F3" />
+          <Text style={styles.ioBtnText}>Excel</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.ioBtn} onPress={handleImport} disabled={importing}>
+          {importing ? <ActivityIndicator size="small" color="#FF9800" /> : <FontAwesome name="upload" size={14} color="#FF9800" />}
+          <Text style={styles.ioBtnText}>Import</Text>
         </TouchableOpacity>
       </View>
 
@@ -230,6 +290,15 @@ const styles = StyleSheet.create({
     backgroundColor: '#e94560', width: 44, height: 44, borderRadius: 22,
     alignItems: 'center', justifyContent: 'center',
   },
+  ioBar: {
+    flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 16, marginBottom: 8, gap: 10,
+    backgroundColor: 'transparent',
+  },
+  ioBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#16213e',
+    paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: '#0f3460',
+  },
+  ioBtnText: { color: '#aaa', fontSize: 12, fontWeight: '600' },
   card: {
     backgroundColor: '#16213e', marginHorizontal: 16, marginBottom: 10,
     borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#0f3460',

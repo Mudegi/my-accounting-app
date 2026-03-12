@@ -9,12 +9,14 @@ import {
   Image,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { Text, View } from '@/components/Themed';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useFocusEffect, useRouter } from 'expo-router';
+import { exportData, importData } from '@/lib/import-export';
 
 type InventoryItem = {
   id: string;
@@ -36,6 +38,8 @@ export default function InventoryScreen() {
   const [search, setSearch] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const [activeFilter, setActiveFilter] = useState<'all' | 'low' | 'out'>('all');
+  const [exporting, setExporting] = useState(false);
+  const [importing, setImporting] = useState(false);
 
   const loadInventory = useCallback(async () => {
     if (!business || !currentBranch) return;
@@ -122,6 +126,56 @@ export default function InventoryScreen() {
   const lowStockCount = items.filter((i) => i.quantity <= i.reorder_level).length;
   const outOfStockCount = items.filter((i) => i.quantity === 0).length;
 
+  const handleExport = async (format: 'csv' | 'xlsx') => {
+    if (!business) return;
+    setExporting(true);
+    try {
+      const headers = ['Name', 'Barcode', 'Quantity', 'Selling Price', 'Cost Price', 'Reorder Level'];
+      const rows = items.map(i => [i.name, i.barcode || '', i.quantity, i.selling_price, i.avg_cost_price, i.reorder_level]);
+      await exportData(business.name, 'Inventory', headers, rows, format);
+    } catch (e: any) {
+      Alert.alert('Export Error', e.message);
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleImport = async () => {
+    if (!business || !currentBranch) return;
+    setImporting(true);
+    try {
+      const rows = await importData(['Name', 'Selling Price']);
+      if (!rows) { setImporting(false); return; }
+      let added = 0;
+      for (const row of rows) {
+        const pName = (row['Name'] || '').trim();
+        const price = parseFloat(row['Selling Price'] || '0');
+        if (!pName || !price) continue;
+        const { data: product, error: pErr } = await supabase.from('products').insert({
+          business_id: business.id,
+          name: pName,
+          barcode: (row['Barcode'] || '').trim() || null,
+        }).select().single();
+        if (pErr || !product) continue;
+        await supabase.from('inventory').insert({
+          branch_id: currentBranch.id,
+          product_id: product.id,
+          quantity: parseInt(row['Quantity'] || '0') || 0,
+          selling_price: price,
+          avg_cost_price: parseFloat(row['Cost Price'] || '0') || 0,
+          reorder_level: parseInt(row['Reorder Level'] || '5') || 5,
+        });
+        added++;
+      }
+      Alert.alert('Import Complete', `${added} product(s) imported.`);
+      loadInventory();
+    } catch (e: any) {
+      Alert.alert('Import Error', e.message);
+    } finally {
+      setImporting(false);
+    }
+  };
+
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
     <View style={styles.container}>
@@ -165,6 +219,22 @@ export default function InventoryScreen() {
             <FontAwesome name="times-circle" size={16} color="#666" />
           </TouchableOpacity>
         )}
+      </View>
+
+      {/* Export / Import Bar */}
+      <View style={styles.ioBar}>
+        <TouchableOpacity style={styles.ioBtn} onPress={() => handleExport('csv')} disabled={exporting}>
+          {exporting ? <ActivityIndicator size="small" color="#4CAF50" /> : <FontAwesome name="file-text-o" size={14} color="#4CAF50" />}
+          <Text style={styles.ioBtnText}>CSV</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.ioBtn} onPress={() => handleExport('xlsx')} disabled={exporting}>
+          <FontAwesome name="file-excel-o" size={14} color="#2196F3" />
+          <Text style={styles.ioBtnText}>Excel</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.ioBtn} onPress={handleImport} disabled={importing}>
+          {importing ? <ActivityIndicator size="small" color="#FF9800" /> : <FontAwesome name="upload" size={14} color="#FF9800" />}
+          <Text style={styles.ioBtnText}>Import</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Product List */}
@@ -267,6 +337,15 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#fff',
   },
+  ioBar: {
+    flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 12, marginBottom: 8, gap: 10,
+    backgroundColor: 'transparent',
+  },
+  ioBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#16213e',
+    paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: '#0f3460',
+  },
+  ioBtnText: { color: '#aaa', fontSize: 12, fontWeight: '600' },
   productCard: {
     flexDirection: 'row',
     justifyContent: 'space-between',
