@@ -95,6 +95,7 @@ DECLARE
   v_max_devices integer;
   v_active_count integer;
   v_session_exists boolean;
+  v_is_super boolean;
   v_stale_cutoff timestamptz := now() - interval '24 hours';
 BEGIN
   -- Clean up stale sessions for this business (inactive > 24h)
@@ -117,6 +118,22 @@ BEGIN
     WHERE device_id = p_device_id AND user_id = auth.uid();
 
     RETURN jsonb_build_object('allowed', true, 'existing', true);
+  END IF;
+
+  -- Super admins bypass device limits
+  SELECT EXISTS(
+    SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.is_super_admin = true
+  ) INTO v_is_super;
+
+  IF v_is_super THEN
+    -- Insert session and skip limit check
+    INSERT INTO device_sessions (user_id, business_id, device_id, device_name, platform)
+    VALUES (auth.uid(), p_business_id, p_device_id, p_device_name, p_platform)
+    ON CONFLICT (device_id, user_id) DO UPDATE
+      SET last_active_at = now(),
+          device_name = EXCLUDED.device_name,
+          platform = EXCLUDED.platform;
+    RETURN jsonb_build_object('allowed', true, 'existing', false);
   END IF;
 
   -- Get max_devices for this business's plan
