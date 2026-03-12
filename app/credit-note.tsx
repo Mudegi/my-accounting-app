@@ -402,7 +402,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#1a1a2e', padding: 16 },
   addBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#7C3AED', borderRadius: 12, padding: 14, marginBottom: 14, gap: 8 },
   addBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 15 },
-  formCard: { backgroundColor: '#16213e', borderRadius: 16, padding: 16, marginBottom: 14, maxHeight: '80%' },
+  formCard: { backgroundColor: '#16213e', borderRadius: 16, padding: 16, marginBottom: 14, flex: 1 },
   formTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold', marginBottom: 12 },
   saleInfo: { backgroundColor: '#0f3460', borderRadius: 10, padding: 12, marginBottom: 12 },
   saleInfoText: { color: '#aaa', fontSize: 13, marginBottom: 2 },
