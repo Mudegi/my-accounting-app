@@ -1,10 +1,11 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   StyleSheet,
   TouchableOpacity,
   FlatList,
   RefreshControl,
   Alert,
+  ScrollView,
 } from 'react-native';
 import { Text, View } from '@/components/Themed';
 import { supabase } from '@/lib/supabase';
@@ -55,6 +56,12 @@ export default function DashboardScreen() {
   const [businessTotal, setBusinessTotal] = useState({ revenue: 0, cost: 0, profit: 0, expenses: 0, netProfit: 0, transactions: 0 });
   const [recentSales, setRecentSales] = useState<RecentSale[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [branchFilter, setBranchFilter] = useState<string>(currentBranch?.id || 'all');
+
+  // Sync branch filter when user changes branch in Settings
+  useEffect(() => {
+    if (currentBranch?.id) setBranchFilter(currentBranch.id);
+  }, [currentBranch?.id]);
 
   const getDateFrom = (p: Period) => {
     const now = new Date();
@@ -73,20 +80,24 @@ export default function DashboardScreen() {
     const from = getDateFrom(period);
 
     if (isAdmin) {
-      // ── Admin: cross-branch overview ──
-      const { data: salesData } = await supabase
+      // ── Admin: filtered or cross-branch overview ──
+      let salesQ = supabase
         .from('sales')
         .select('branch_id, total_amount, sale_items(quantity, cost_price)')
         .eq('business_id', business.id)
         .eq('status', 'completed')
         .gte('created_at', from);
+      if (branchFilter !== 'all') salesQ = salesQ.eq('branch_id', branchFilter);
+      const { data: salesData } = await salesQ;
 
       // Expenses for the period
-      const { data: expData } = await supabase
+      let expQ = supabase
         .from('expenses')
         .select('branch_id, amount')
         .eq('business_id', business.id)
         .gte('date', from.split('T')[0]);
+      if (branchFilter !== 'all') expQ = expQ.eq('branch_id', branchFilter);
+      const { data: expData } = await expQ;
 
       // Build per-branch summaries
       const branchMap: Record<string, BranchSummary> = {};
@@ -135,12 +146,14 @@ export default function DashboardScreen() {
         transactions: totalTx,
       });
 
-      // Low stock across all branches
-      const { count: lowStockCount } = await supabase
+      // Low stock
+      let lowStockQ = supabase
         .from('inventory')
         .select('*, branches!inner(business_id)', { count: 'exact', head: true })
         .eq('branches.business_id', business.id)
         .lt('quantity', 5);
+      if (branchFilter !== 'all') lowStockQ = lowStockQ.eq('branch_id', branchFilter);
+      const { count: lowStockCount } = await lowStockQ;
 
       // Total products
       const { count: totalProducts } = await supabase
@@ -155,13 +168,15 @@ export default function DashboardScreen() {
         totalProducts: totalProducts || 0,
       });
 
-      // Recent sales across all branches
-      const { data: recent } = await supabase
+      // Recent sales
+      let recentQ = supabase
         .from('sales')
         .select('id, total_amount, created_at, status, branches(name)')
         .eq('business_id', business.id)
         .order('created_at', { ascending: false })
         .limit(15);
+      if (branchFilter !== 'all') recentQ = recentQ.eq('branch_id', branchFilter);
+      const { data: recent } = await recentQ;
       setRecentSales((recent || []).map((s: any) => ({
         id: s.id, total_amount: s.total_amount, created_at: s.created_at, status: s.status, branch_name: s.branches?.name,
       })));
@@ -201,7 +216,7 @@ export default function DashboardScreen() {
         .limit(10);
       setRecentSales(recent || []);
     }
-  }, [business, currentBranch, branches, period, isAdmin]);
+  }, [business, currentBranch, branches, period, isAdmin, branchFilter]);
 
   useFocusEffect(useCallback(() => {
     loadDashboard();
@@ -242,9 +257,32 @@ export default function DashboardScreen() {
                 👋 Hello, {profile?.full_name || 'User'}
               </Text>
               <Text style={styles.branchLabel}>
-                {isAdmin ? `🏢 ${business?.name} · All Branches` : `📍 ${currentBranch?.name}`}
+                {isAdmin
+                  ? `🏢 ${business?.name} · ${branchFilter === 'all' ? 'All Branches' : branches.find(b => b.id === branchFilter)?.name || 'All Branches'}`
+                  : `📍 ${currentBranch?.name}`}
               </Text>
             </View>
+
+            {/* Branch Filter (admin) */}
+            {isAdmin && branches.length > 1 && (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>
+                <TouchableOpacity
+                  style={[styles.periodBtn, branchFilter === 'all' && styles.periodBtnActive]}
+                  onPress={() => setBranchFilter('all')}
+                >
+                  <Text style={[styles.periodText, branchFilter === 'all' && styles.periodTextActive]}>All</Text>
+                </TouchableOpacity>
+                {branches.map(b => (
+                  <TouchableOpacity
+                    key={b.id}
+                    style={[styles.periodBtn, branchFilter === b.id && styles.periodBtnActive]}
+                    onPress={() => setBranchFilter(b.id)}
+                  >
+                    <Text style={[styles.periodText, branchFilter === b.id && styles.periodTextActive]}>{b.name}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
 
             {/* Period Selector (admin or all) */}
             {isAdmin && (
@@ -300,8 +338,8 @@ export default function DashboardScreen() {
               </View>
             </View>
 
-            {/* Admin: Per-Branch Profit Breakdown */}
-            {isAdmin && branchSummaries.length > 0 && (
+            {/* Admin: Per-Branch Profit Breakdown (only when viewing all) */}
+            {isAdmin && branchFilter === 'all' && branchSummaries.length > 0 && (
               <>
                 <Text style={styles.sectionTitle}>📊 Branch Performance</Text>
                 {branchSummaries.map((b) => (
