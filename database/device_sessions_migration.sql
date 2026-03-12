@@ -200,6 +200,7 @@ $$;
 -- ═══════════════════════════════════════════════════════════════════
 -- 5. RPC: Heartbeat — update last_active_at
 -- ═══════════════════════════════════════════════════════════════════
+DROP FUNCTION IF EXISTS heartbeat_device_session(text);
 CREATE OR REPLACE FUNCTION heartbeat_device_session(p_device_id text)
 RETURNS jsonb
 LANGUAGE plpgsql
