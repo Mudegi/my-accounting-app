@@ -41,6 +41,7 @@ export async function registerDeviceSession(businessId: string): Promise<{
   allowed: boolean;
   maxDevices?: number;
   activeCount?: number;
+  reason?: string;
 }> {
   const deviceId = await getDeviceId();
   const deviceName = getDeviceName();
@@ -63,15 +64,20 @@ export async function registerDeviceSession(businessId: string): Promise<{
     allowed: data?.allowed ?? true,
     maxDevices: data?.max_devices,
     activeCount: data?.active_count,
+    reason: data?.reason,
   };
 }
 
 // ── Heartbeat: call on app foreground ──
-export async function heartbeatSession(): Promise<void> {
+export async function heartbeatSession(): Promise<{ allowed: boolean; reason?: string }> {
   try {
     const deviceId = await getDeviceId();
-    await supabase.rpc('heartbeat_device_session', { p_device_id: deviceId });
+    const { data } = await supabase.rpc('heartbeat_device_session', { p_device_id: deviceId });
+    if (data && data.allowed === false) {
+      return { allowed: false, reason: data.reason };
+    }
   } catch {}
+  return { allowed: true };
 }
 
 // ── Remove session on logout ──

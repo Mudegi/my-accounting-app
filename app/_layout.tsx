@@ -204,6 +204,10 @@ function RootLayoutNav() {
           options={{ title: 'Product Categories', headerStyle: { backgroundColor: '#1a1a2e' }, headerTintColor: '#fff' }}
         />
         <Stack.Screen
+          name="admin/schedule"
+          options={{ title: 'Working Hours', headerStyle: { backgroundColor: '#1a1a2e' }, headerTintColor: '#fff' }}
+        />
+        <Stack.Screen
           name="reports"
           options={{ title: 'Sales Reports', headerStyle: { backgroundColor: '#1a1a2e' }, headerTintColor: '#fff' }}
         />

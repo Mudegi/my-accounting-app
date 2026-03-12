@@ -22,12 +22,17 @@ type User = {
   role: string;
   branch_name: string | null;
   branch_id: string | null;
+  is_active: boolean;
+  suspended_at: string | null;
+  deleted_at: string | null;
+  suspension_reason: string | null;
 };
 
 const ROLES = ['admin', 'branch_manager', 'salesperson'] as const;
 
 export default function UsersScreen() {
   const { business, branches, profile } = useAuth();
+  const router = useRouter();
 
   // Admin-only route guard
   if (profile && profile.role !== 'admin') {
@@ -42,14 +47,23 @@ export default function UsersScreen() {
   const [role, setRole] = useState<string>('salesperson');
   const [branchId, setBranchId] = useState('');
   const [saving, setSaving] = useState(false);
+  const [userLimit, setUserLimit] = useState<{ max: number; current: number } | null>(null);
 
   const load = useCallback(async () => {
     if (!business) return;
     setLoading(true);
+
+    // Load user limit info
+    const { data: limitData } = await supabase.rpc('check_user_limit', { p_business_id: business.id });
+    if (limitData) {
+      setUserLimit({ max: limitData.max_users, current: limitData.current_count ?? 0 });
+    }
+
     const { data } = await supabase
       .from('profiles')
-      .select(`id, full_name, role, branch_id, branches(name)`)
+      .select(`id, full_name, role, branch_id, is_active, suspended_at, deleted_at, suspension_reason, branches(name)`)
       .eq('business_id', business.id)
+      .is('deleted_at', null)
       .order('full_name');
 
     if (data) {
@@ -59,6 +73,10 @@ export default function UsersScreen() {
         role: u.role,
         branch_id: u.branch_id,
         branch_name: u.branches?.name || null,
+        is_active: u.is_active,
+        suspended_at: u.suspended_at,
+        deleted_at: u.deleted_at,
+        suspension_reason: u.suspension_reason,
       })));
     }
     setLoading(false);
@@ -72,6 +90,22 @@ export default function UsersScreen() {
     if (!business || !profile) return;
 
     setSaving(true);
+
+    // Check user limit before creating account
+    const { data: limitCheck, error: limitError } = await supabase.rpc('check_user_limit', {
+      p_business_id: business.id,
+    });
+    if (limitError) {
+      console.error('User limit check error:', limitError);
+    } else if (limitCheck && !limitCheck.allowed) {
+      Alert.alert(
+        'User Limit Reached',
+        `Your plan allows ${limitCheck.max_users} user${limitCheck.max_users === 1 ? '' : 's'}. You currently have ${limitCheck.current_count}.\n\nUpgrade your plan to add more users.`
+      );
+      setSaving(false);
+      return;
+    }
+
     const tempPassword = Math.random().toString(36).slice(-8) + 'A1!';
 
     // Save admin session before creating new user (signUp may auto-sign-in the new user)
@@ -139,17 +173,80 @@ export default function UsersScreen() {
 
   const handleRemove = (userId: string, userName: string) => {
     if (userId === profile?.id) { Alert.alert("Can't remove yourself"); return; }
-    Alert.alert('Remove User', `Remove ${userName} from this business?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Remove',
-        style: 'destructive',
-        onPress: async () => {
-          await supabase.from('profiles').delete().eq('id', userId);
-          load();
+    Alert.alert(
+      'Delete User',
+      `This will deactivate ${userName}'s account. They will no longer be able to log in. All their historical data (sales, etc.) will be preserved.\n\nContinue?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => handleSoftDelete(userId),
         }
-      }
-    ]);
+      ]
+    );
+  };
+
+  const handleSoftDelete = async (userId: string) => {
+    const { error } = await supabase.rpc('soft_delete_user', {
+      p_user_id: userId,
+      p_reason: 'Removed by admin',
+    });
+    if (error) {
+      Alert.alert('Error', error.message);
+    } else {
+      Alert.alert('Done', 'User has been removed. Their historical records are preserved.');
+      load();
+    }
+  };
+
+  const handleSuspend = (userId: string, userName: string) => {
+    if (userId === profile?.id) { Alert.alert("Can't suspend yourself"); return; }
+    Alert.alert(
+      'Suspend User',
+      `Suspend ${userName}? They will be logged out immediately and blocked from signing in until you reactivate them.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Suspend',
+          style: 'destructive',
+          onPress: async () => {
+            const { error } = await supabase.rpc('suspend_user', {
+              p_user_id: userId,
+              p_reason: 'Suspended by admin',
+            });
+            if (error) {
+              Alert.alert('Error', error.message);
+            } else {
+              Alert.alert('Suspended', `${userName} has been suspended and logged out of all devices.`);
+              load();
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleReactivate = (userId: string, userName: string) => {
+    Alert.alert(
+      'Reactivate User',
+      `Allow ${userName} to log in again?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reactivate',
+          onPress: async () => {
+            const { error } = await supabase.rpc('reactivate_user', { p_user_id: userId });
+            if (error) {
+              Alert.alert('Error', error.message);
+            } else {
+              Alert.alert('Reactivated', `${userName} can now log in again.`);
+              load();
+            }
+          }
+        }
+      ]
+    );
   };
 
   const roleColor = (r: string) => {
@@ -165,6 +262,19 @@ export default function UsersScreen() {
         <FontAwesome name="user-plus" size={16} color="#fff" />
         <Text style={styles.inviteBtnText}>Invite New User</Text>
       </TouchableOpacity>
+
+      {userLimit && userLimit.max !== -1 && (
+        <View style={{ backgroundColor: '#16213e', borderRadius: 10, padding: 10, marginBottom: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Text style={{ color: '#aaa', fontSize: 13 }}>
+            Users: <Text style={{ color: '#fff', fontWeight: 'bold' }}>{userLimit.current}</Text> / {userLimit.max}
+          </Text>
+          <View style={{ backgroundColor: userLimit.current >= userLimit.max ? '#e9456033' : '#4CAF5033', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 }}>
+            <Text style={{ color: userLimit.current >= userLimit.max ? '#e94560' : '#4CAF50', fontSize: 11, fontWeight: '600' }}>
+              {userLimit.current >= userLimit.max ? 'Limit reached' : `${userLimit.max - userLimit.current} remaining`}
+            </Text>
+          </View>
+        </View>
+      )}
 
       {showInvite && (
         <View style={styles.formCard}>
@@ -208,47 +318,106 @@ export default function UsersScreen() {
           data={users}
           keyExtractor={(u) => u.id}
           renderItem={({ item }) => (
-            <View style={styles.card}>
+            <View style={[styles.card, !item.is_active && { opacity: 0.6, borderLeftWidth: 3, borderLeftColor: '#e94560' }]}>
               <View style={styles.cardHeader}>
                 <View style={styles.avatar}>
                   <Text style={styles.avatarText}>{item.full_name.charAt(0).toUpperCase()}</Text>
                 </View>
                 <View style={styles.cardInfo}>
                   <Text style={styles.userName}>{item.full_name}</Text>
-                  <View style={[styles.roleBadge, { backgroundColor: roleColor(item.role) + '22', borderColor: roleColor(item.role) }]}>
-                    <Text style={[styles.roleText, { color: roleColor(item.role) }]}>{item.role.replace('_', ' ')}</Text>
+                  <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center', backgroundColor: 'transparent', flexWrap: 'wrap' }}>
+                    <View style={[styles.roleBadge, { backgroundColor: roleColor(item.role) + '22', borderColor: roleColor(item.role) }]}>
+                      <Text style={[styles.roleText, { color: roleColor(item.role) }]}>{item.role.replace('_', ' ')}</Text>
+                    </View>
+                    {!item.is_active && (
+                      <View style={[styles.roleBadge, { backgroundColor: '#e9456022', borderColor: '#e94560' }]}>
+                        <Text style={[styles.roleText, { color: '#e94560' }]}>SUSPENDED</Text>
+                      </View>
+                    )}
                   </View>
                 </View>
-                {item.id !== profile?.id && (
-                  <TouchableOpacity onPress={() => handleRemove(item.id, item.full_name)} style={styles.removeBtn}>
-                    <FontAwesome name="trash" size={16} color="#e94560" />
-                  </TouchableOpacity>
-                )}
               </View>
+
+              {!item.is_active && item.suspension_reason && (
+                <Text style={{ color: '#e94560', fontSize: 12, marginBottom: 8, fontStyle: 'italic' }}>
+                  Reason: {item.suspension_reason}
+                </Text>
+              )}
 
               <Text style={styles.branchLabel}>Branch: <Text style={styles.branchValue}>{item.branch_name || 'None'}</Text></Text>
 
-              <View style={styles.actionsRow}>
-                <Text style={styles.actionLabel}>Move to:</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.branchScroll}>
-                  {branches.filter((b) => b.id !== item.branch_id).map((b) => (
-                    <TouchableOpacity key={b.id} style={styles.actionChip} onPress={() => handleBranchChange(item.id, b.id)}>
-                      <Text style={styles.actionChipText}>{b.name}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </View>
+              {item.is_active && (
+                <>
+                  <View style={styles.actionsRow}>
+                    <Text style={styles.actionLabel}>Move to:</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.branchScroll}>
+                      {branches.filter((b) => b.id !== item.branch_id).map((b) => (
+                        <TouchableOpacity key={b.id} style={styles.actionChip} onPress={() => handleBranchChange(item.id, b.id)}>
+                          <Text style={styles.actionChipText}>{b.name}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
 
+                  {item.id !== profile?.id && (
+                    <View style={styles.actionsRow}>
+                      <Text style={styles.actionLabel}>Role:</Text>
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.branchScroll}>
+                        {ROLES.filter((r) => r !== item.role).map((r) => (
+                          <TouchableOpacity key={r} style={[styles.actionChip, { borderColor: roleColor(r) }]} onPress={() => handleRoleChange(item.id, r, item.full_name)}>
+                            <Text style={[styles.actionChipText, { color: roleColor(r) }]}>{r.replace('_', ' ')}</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </ScrollView>
+                    </View>
+                  )}
+                </>
+              )}
+
+              {/* Action buttons for non-self users */}
               {item.id !== profile?.id && (
-                <View style={styles.actionsRow}>
-                  <Text style={styles.actionLabel}>Role:</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.branchScroll}>
-                    {ROLES.filter((r) => r !== item.role).map((r) => (
-                      <TouchableOpacity key={r} style={[styles.actionChip, { borderColor: roleColor(r) }]} onPress={() => handleRoleChange(item.id, r, item.full_name)}>
-                        <Text style={[styles.actionChipText, { color: roleColor(r) }]}>{r.replace('_', ' ')}</Text>
+                <View style={{ flexDirection: 'row', gap: 8, marginTop: 8, backgroundColor: 'transparent', flexWrap: 'wrap' }}>
+                  {item.is_active ? (
+                    <>
+                      <TouchableOpacity
+                        style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#FF980022', borderRadius: 8, paddingVertical: 8, borderWidth: 1, borderColor: '#FF9800' }}
+                        onPress={() => handleSuspend(item.id, item.full_name)}
+                      >
+                        <FontAwesome name="ban" size={13} color="#FF9800" />
+                        <Text style={{ color: '#FF9800', fontSize: 12, fontWeight: '600' }}>Suspend</Text>
                       </TouchableOpacity>
-                    ))}
-                  </ScrollView>
+                      <TouchableOpacity
+                        style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#2196F322', borderRadius: 8, paddingVertical: 8, borderWidth: 1, borderColor: '#2196F3' }}
+                        onPress={() => router.push(`/admin/schedule?userId=${item.id}&userName=${encodeURIComponent(item.full_name)}` as any)}
+                      >
+                        <FontAwesome name="clock-o" size={13} color="#2196F3" />
+                        <Text style={{ color: '#2196F3', fontSize: 12, fontWeight: '600' }}>Hours</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#e9456022', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 12, borderWidth: 1, borderColor: '#e94560' }}
+                        onPress={() => handleRemove(item.id, item.full_name)}
+                      >
+                        <FontAwesome name="trash" size={13} color="#e94560" />
+                      </TouchableOpacity>
+                    </>
+                  ) : (
+                    <>
+                      <TouchableOpacity
+                        style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#4CAF5022', borderRadius: 8, paddingVertical: 8, borderWidth: 1, borderColor: '#4CAF50' }}
+                        onPress={() => handleReactivate(item.id, item.full_name)}
+                      >
+                        <FontAwesome name="check-circle" size={13} color="#4CAF50" />
+                        <Text style={{ color: '#4CAF50', fontSize: 12, fontWeight: '600' }}>Reactivate</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#e9456022', borderRadius: 8, paddingVertical: 8, borderWidth: 1, borderColor: '#e94560' }}
+                        onPress={() => handleRemove(item.id, item.full_name)}
+                      >
+                        <FontAwesome name="trash" size={13} color="#e94560" />
+                        <Text style={{ color: '#e94560', fontSize: 12, fontWeight: '600' }}>Delete</Text>
+                      </TouchableOpacity>
+                    </>
+                  )}
                 </View>
               )}
             </View>

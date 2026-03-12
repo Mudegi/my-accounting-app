@@ -97,11 +97,29 @@ DECLARE
   v_session_exists boolean;
   v_is_super boolean;
   v_stale_cutoff timestamptz := now() - interval '24 hours';
+  v_user_stale_cutoff timestamptz := now() - interval '1 hour';
+  v_access_check jsonb;
 BEGIN
+  -- ── Check suspension & working hours first ──
+  v_access_check := check_user_access_allowed(auth.uid());
+  IF (v_access_check->>'allowed')::boolean = false THEN
+    RETURN jsonb_build_object(
+      'allowed', false,
+      'reason', v_access_check->>'reason'
+    );
+  END IF;
+
   -- Clean up stale sessions for this business (inactive > 24h)
   DELETE FROM device_sessions
   WHERE business_id = p_business_id
     AND last_active_at < v_stale_cutoff;
+
+  -- Clean up same user's old sessions from other devices (inactive > 1h)
+  -- This handles the reinstall scenario: old device_id stops heartbeating
+  DELETE FROM device_sessions
+  WHERE user_id = auth.uid()
+    AND device_id != p_device_id
+    AND last_active_at < v_user_stale_cutoff;
 
   -- Check if this device already has a session (re-login / token refresh)
   SELECT EXISTS(
@@ -183,14 +201,27 @@ $$;
 -- 5. RPC: Heartbeat — update last_active_at
 -- ═══════════════════════════════════════════════════════════════════
 CREATE OR REPLACE FUNCTION heartbeat_device_session(p_device_id text)
-RETURNS void
+RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
+DECLARE
+  v_access_check jsonb;
 BEGIN
+  -- Check suspension & working hours
+  v_access_check := check_user_access_allowed(auth.uid());
+  IF (v_access_check->>'allowed')::boolean = false THEN
+    -- Kill this session and return denial
+    DELETE FROM device_sessions
+    WHERE device_id = p_device_id AND user_id = auth.uid();
+    RETURN jsonb_build_object('allowed', false, 'reason', v_access_check->>'reason');
+  END IF;
+
   UPDATE device_sessions
   SET last_active_at = now()
   WHERE device_id = p_device_id AND user_id = auth.uid();
+
+  RETURN jsonb_build_object('allowed', true);
 END;
 $$;
 

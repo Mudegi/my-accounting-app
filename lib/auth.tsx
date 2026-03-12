@@ -125,8 +125,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         } catch {}
         touchActivity();
-        // Heartbeat to keep session alive
-        heartbeatSession();
+        // Heartbeat to keep session alive + check access
+        const hb = await heartbeatSession();
+        if (hb && !hb.allowed) {
+          const { Alert } = require('react-native');
+          Alert.alert(
+            'Access Revoked',
+            hb.reason || 'Your access has been revoked. Contact your administrator.',
+            [{ text: 'OK', onPress: () => supabase.auth.signOut() }]
+          );
+          return;
+        }
       } else if (nextState.match(/inactive|background/)) {
         // Going to background — stamp the time
         touchActivity();
@@ -265,12 +274,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const result = await registerDeviceSession(bizId);
       if (!result.allowed) {
         const { Alert } = require('react-native');
-        Alert.alert(
-          'Device Limit Reached',
-          `Your plan allows ${result.maxDevices} device${result.maxDevices === 1 ? '' : 's'}. ` +
-          `${result.activeCount} already active.\n\nPlease log out from another device or upgrade your plan.`,
-          [{ text: 'OK', onPress: () => supabase.auth.signOut() }]
-        );
+        // If reason is set, it's a suspension/schedule denial
+        if (result.reason) {
+          Alert.alert(
+            'Access Denied',
+            result.reason,
+            [{ text: 'OK', onPress: () => supabase.auth.signOut() }]
+          );
+        } else {
+          Alert.alert(
+            'Device Limit Reached',
+            `Your plan allows ${result.maxDevices} device${result.maxDevices === 1 ? '' : 's'}. ` +
+            `${result.activeCount} already active.\n\nPlease log out from another device or upgrade your plan.`,
+            [{ text: 'OK', onPress: () => supabase.auth.signOut() }]
+          );
+        }
         return false;
       }
     } catch (e) {
