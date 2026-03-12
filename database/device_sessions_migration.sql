@@ -369,9 +369,9 @@ BEGIN
     b.efris_api_key::text,
     b.efris_api_url::text,
     b.efris_test_mode,
-    (SELECT count(*) FROM device_sessions ds
+    COALESCE((SELECT count(*) FROM device_sessions ds
      WHERE ds.business_id = b.id
-       AND ds.last_active_at > now() - interval '24 hours') AS active_devices
+       AND ds.last_active_at > now() - interval '24 hours'), 0) AS active_devices
   FROM businesses b
   LEFT JOIN profiles p ON p.business_id = b.id AND p.role = 'admin'
   LEFT JOIN auth.users u ON u.id = p.id
