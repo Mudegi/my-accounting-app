@@ -348,38 +348,42 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.is_super_admin = true
-  ) THEN
-    RAISE EXCEPTION 'Super admin access required';
+  IF NOT is_super_admin() THEN
+    RAISE EXCEPTION 'Access denied: super admin only';
   END IF;
 
   RETURN QUERY
-  SELECT
+  SELECT DISTINCT ON (b.id)
     b.id,
-    b.name,
-    b.tin,
-    b.default_currency,
-    b.subscription_status,
+    b.name::text,
+    b.tin::text,
+    b.default_currency::text,
+    b.subscription_status::text,
     b.subscription_ends_at,
     b.created_at,
-    owner.full_name   AS owner_name,
-    owner_auth.email   AS owner_email,
-    sp.name            AS plan_name,
-    (SELECT count(*) FROM profiles p2 WHERE p2.business_id = b.id) AS user_count,
+    p.full_name::text   AS owner_name,
+    u.email::text        AS owner_email,
+    sp.display_name::text AS plan_name,
+    (SELECT COUNT(*) FROM profiles pr WHERE pr.business_id = b.id) AS user_count,
     b.is_efris_enabled,
-    b.efris_api_key,
-    b.efris_api_url,
+    b.efris_api_key::text,
+    b.efris_api_url::text,
     b.efris_test_mode,
     (SELECT count(*) FROM device_sessions ds
      WHERE ds.business_id = b.id
        AND ds.last_active_at > now() - interval '24 hours') AS active_devices
   FROM businesses b
-  LEFT JOIN profiles owner ON owner.business_id = b.id AND owner.role = 'admin'
-  LEFT JOIN auth.users owner_auth ON owner_auth.id = owner.id
-  LEFT JOIN subscriptions sub ON sub.business_id = b.id AND sub.status IN ('trial','active')
+  LEFT JOIN profiles p ON p.business_id = b.id AND p.role = 'admin'
+  LEFT JOIN auth.users u ON u.id = p.id
+  LEFT JOIN LATERAL (
+    SELECT s.plan_id
+    FROM subscriptions s
+    WHERE s.business_id = b.id
+    ORDER BY s.current_period_start DESC
+    LIMIT 1
+  ) sub ON true
   LEFT JOIN subscription_plans sp ON sp.id = sub.plan_id
-  ORDER BY b.created_at DESC;
+  ORDER BY b.id, b.created_at DESC;
 END;
 $$;
 
