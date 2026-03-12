@@ -186,7 +186,7 @@ function RootLayoutNav() {
         <Stack.Screen
           name="product/[id]"
           options={({ route }: any) => ({
-            title: route.params?.id === 'new' ? 'Add Product' : 'Edit Product',
+            title: route.params?.id === 'new' ? 'Add Product / Service' : 'Edit Product / Service',
             headerStyle: { backgroundColor: '#1a1a2e' },
             headerTintColor: '#fff',
           })}

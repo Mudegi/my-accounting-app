@@ -541,7 +541,7 @@ export default function ProductFormScreen() {
 
           {/* SKU / Commodity Code */}
           <View style={styles.field}>
-            <Text style={styles.label}>SKU / Commodity Code</Text>
+            <Text style={styles.label}>{efrisEnabled ? 'SKU / Commodity Code' : 'SKU / Product Code'}</Text>
             <Text style={styles.hint}>{efrisEnabled ? 'Product identifier. For EFRIS, use the 8-digit UNBS commodity code.' : 'Optional product identifier or code.'}</Text>
             <TextInput
               style={styles.input}
@@ -669,7 +669,7 @@ export default function ProductFormScreen() {
                 disabled={saving}
               >
                 {saving ? <ActivityIndicator color="#fff" /> : (
-                  <Text style={styles.saveButtonText}>{isNew ? '+ Add Product' : '💾 Save Changes'}</Text>
+                  <Text style={styles.saveButtonText}>{isNew ? '+ Add' : '💾 Save Changes'}</Text>
                 )}
               </TouchableOpacity>
               <TouchableOpacity
@@ -689,7 +689,7 @@ export default function ProductFormScreen() {
               disabled={saving}
             >
               {saving ? <ActivityIndicator color="#fff" /> : (
-                <Text style={styles.saveButtonText}>{isNew ? '+ Add Product' : '💾 Save Changes'}</Text>
+                <Text style={styles.saveButtonText}>{isNew ? '+ Add' : '💾 Save Changes'}</Text>
               )}
             </TouchableOpacity>
           )}
