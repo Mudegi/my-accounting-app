@@ -1,7 +1,13 @@
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import * as DocumentPicker from 'expo-document-picker';
-import * as XLSX from 'xlsx';
+
+// Lazy-load xlsx to avoid crashes on React Native module init
+let _XLSX: typeof import('xlsx') | null = null;
+async function getXLSX() {
+  if (!_XLSX) _XLSX = await import('xlsx');
+  return _XLSX;
+}
 
 /* ── CSV helpers ── */
 
@@ -40,6 +46,7 @@ export async function exportData(
     const uri = file.uri;
     await Sharing.shareAsync(uri, { mimeType: 'text/csv', dialogTitle: `Export ${label}` });
   } else {
+    const XLSX = await getXLSX();
     const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, label);
@@ -79,6 +86,7 @@ export async function importData(
   let rows: Record<string, string>[];
 
   if (name.endsWith('.xlsx') || name.endsWith('.xls')) {
+    const XLSX = await getXLSX();
     const file = new File(uri);
     const base64 = await file.text();
     const wb = XLSX.read(base64, { type: 'string' });
