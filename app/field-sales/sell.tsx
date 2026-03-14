@@ -188,7 +188,7 @@ export default function FieldSellScreen() {
         setGpsLng(loc.coords.longitude);
       } catch (e) { /* use existing coords */ }
 
-      // 1. Create or find customer
+      // 1. Create or find customer — save GPS as customer location
       let customerId: string | null = null;
       const { data: existingCustomer } = await supabase
         .from('customers')
@@ -199,6 +199,13 @@ export default function FieldSellScreen() {
 
       if (existingCustomer) {
         customerId = existingCustomer.id;
+        // Update customer's last known location with this transaction's GPS
+        if (gpsLat && gpsLng) {
+          await supabase
+            .from('customers')
+            .update({ gps_lat: gpsLat, gps_lng: gpsLng, name: customerName.trim() })
+            .eq('id', existingCustomer.id);
+        }
       } else {
         const { data: newCustomer } = await supabase
           .from('customers')
@@ -209,6 +216,8 @@ export default function FieldSellScreen() {
             source: 'field',
             created_by: profile.id,
             buyer_type: '1', // B2C default
+            gps_lat: gpsLat,
+            gps_lng: gpsLng,
           })
           .select()
           .single();

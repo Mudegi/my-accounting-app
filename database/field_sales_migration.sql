@@ -39,6 +39,8 @@ alter table sales add constraint sales_status_check
 -- 3. ADD FIELD SOURCE COLUMNS TO CUSTOMERS TABLE
 alter table customers add column if not exists source text default 'in_store';
 alter table customers add column if not exists created_by uuid references auth.users(id);
+alter table customers add column if not exists gps_lat numeric(10,7);
+alter table customers add column if not exists gps_lng numeric(10,7);
 
 -- 4. RLS POLICIES FOR FIELD STOCK ASSIGNMENTS
 alter table field_stock_assignments enable row level security;

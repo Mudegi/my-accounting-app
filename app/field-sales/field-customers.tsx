@@ -24,6 +24,8 @@ type FieldCustomer = {
   phone: string | null;
   email: string | null;
   address: string | null;
+  gps_lat: number | null;
+  gps_lng: number | null;
   created_by: string | null;
   created_by_name: string;
   created_at: string;
@@ -50,7 +52,7 @@ export default function FieldCustomersScreen() {
     setLoading(true);
     let query = supabase
       .from('customers')
-      .select('id, name, phone, email, address, created_by, created_at')
+      .select('id, name, phone, email, address, gps_lat, gps_lng, created_by, created_at')
       .eq('business_id', business.id)
       .eq('source', 'field')
       .order('created_at', { ascending: false });
@@ -80,6 +82,8 @@ export default function FieldCustomersScreen() {
         phone: c.phone,
         email: c.email,
         address: c.address,
+        gps_lat: c.gps_lat ? Number(c.gps_lat) : null,
+        gps_lng: c.gps_lng ? Number(c.gps_lng) : null,
         created_by: c.created_by,
         created_by_name: creatorMap[c.created_by] || '?',
         created_at: c.created_at,
@@ -200,6 +204,9 @@ export default function FieldCustomersScreen() {
                     <Text style={styles.cardPhone}>{item.phone || 'No phone'}</Text>
                   </TouchableOpacity>
                   {item.email && <Text style={styles.cardSub}>✉️ {item.email}</Text>}
+                  {item.gps_lat && (
+                    <Text style={styles.cardGps}>📍 {item.gps_lat.toFixed(4)}, {item.gps_lng?.toFixed(4)}</Text>
+                  )}
                   {isAdmin && (
                     <Text style={styles.cardCreator}>Added by {item.created_by_name}</Text>
                   )}
@@ -274,6 +281,7 @@ const styles = StyleSheet.create({
   cardName: { fontSize: 16, fontWeight: 'bold', color: '#fff' },
   cardPhone: { fontSize: 14, color: '#4CAF50', fontWeight: '600' },
   cardSub: { fontSize: 13, color: '#aaa', marginTop: 3 },
+  cardGps: { fontSize: 12, color: '#2196F3', marginTop: 3 },
   cardCreator: { fontSize: 11, color: '#666', marginTop: 4, fontStyle: 'italic' },
   empty: { alignItems: 'center', paddingTop: 60, backgroundColor: 'transparent' },
   emptyText: { color: '#555', fontSize: 16, marginTop: 12 },
