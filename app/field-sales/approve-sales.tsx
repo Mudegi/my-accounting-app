@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   Modal,
   ScrollView,
+  Linking,
 } from 'react-native';
 import { Text, View } from '@/components/Themed';
 import { useAuth } from '@/lib/auth';
@@ -98,6 +99,12 @@ export default function ApproveSalesScreen() {
     );
   };
 
+  const openMap = (lat: number, lng: number, label?: string) => {
+    const encodedLabel = encodeURIComponent(label || 'Field Sale Location');
+    const url = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}&query_place_id=${encodedLabel}`;
+    Linking.openURL(url);
+  };
+
   const formatDate = (d: string) => {
     const date = new Date(d);
     const today = new Date();
@@ -146,12 +153,18 @@ export default function ApproveSalesScreen() {
                 </Text>
               </View>
 
-              {item.gps_lat && (
-                <Text style={styles.gpsText}>
-                  📍 {item.gps_lat.toFixed(4)}, {item.gps_lng?.toFixed(4)}
-                </Text>
-              )}
-              {!item.gps_lat && (
+              {item.gps_lat && item.gps_lng ? (
+                <TouchableOpacity
+                  style={styles.mapLink}
+                  onPress={() => openMap(item.gps_lat!, item.gps_lng!, `Sale by ${item.seller_name}`)}
+                >
+                  <FontAwesome name="map-marker" size={14} color="#2196F3" />
+                  <Text style={styles.mapLinkText}>
+                    {item.gps_lat.toFixed(4)}, {item.gps_lng.toFixed(4)}
+                  </Text>
+                  <FontAwesome name="external-link" size={10} color="#2196F3" />
+                </TouchableOpacity>
+              ) : (
                 <Text style={[styles.gpsText, { color: '#e94560' }]}>⚠️ No GPS location recorded</Text>
               )}
 
@@ -214,10 +227,20 @@ export default function ApproveSalesScreen() {
 
                 <View style={styles.detailSection}>
                   <Text style={styles.detailLabel}>Location</Text>
-                  {selectedSale.gps_lat ? (
-                    <Text style={[styles.detailValue, { color: '#4CAF50' }]}>
-                      {selectedSale.gps_lat.toFixed(6)}, {selectedSale.gps_lng?.toFixed(6)}
-                    </Text>
+                  {selectedSale.gps_lat && selectedSale.gps_lng ? (
+                    <>
+                      <Text style={[styles.detailValue, { color: '#4CAF50' }]}>
+                        {selectedSale.gps_lat.toFixed(6)}, {selectedSale.gps_lng.toFixed(6)}
+                      </Text>
+                      <TouchableOpacity
+                        style={styles.viewMapBtn}
+                        onPress={() => openMap(selectedSale.gps_lat!, selectedSale.gps_lng!, `Sale by ${selectedSale.seller_name}`)}
+                      >
+                        <FontAwesome name="map" size={14} color="#fff" />
+                        <Text style={styles.viewMapBtnText}>View on Map</Text>
+                        <FontAwesome name="external-link" size={11} color="#fff" />
+                      </TouchableOpacity>
+                    </>
                   ) : (
                     <Text style={[styles.detailValue, { color: '#e94560' }]}>No GPS data</Text>
                   )}
@@ -279,6 +302,10 @@ const styles = StyleSheet.create({
   customerRow: { marginTop: 8, backgroundColor: 'transparent' },
   customerInfo: { color: '#aaa', fontSize: 13 },
   gpsText: { color: '#4CAF50', fontSize: 11, marginTop: 4 },
+  mapLink: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6, backgroundColor: '#2196F315', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, alignSelf: 'flex-start' },
+  mapLinkText: { color: '#2196F3', fontSize: 12, fontWeight: '600' },
+  viewMapBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#2196F3', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, marginTop: 8, alignSelf: 'flex-start' },
+  viewMapBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 13 },
   itemCountText: { color: '#666', fontSize: 12, marginTop: 4 },
   actionRow: { flexDirection: 'row', gap: 10, marginTop: 12, backgroundColor: 'transparent' },
   approveBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#4CAF50', borderRadius: 10, paddingVertical: 10 },

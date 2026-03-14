@@ -204,8 +204,18 @@ export default function FieldCustomersScreen() {
                     <Text style={styles.cardPhone}>{item.phone || 'No phone'}</Text>
                   </TouchableOpacity>
                   {item.email && <Text style={styles.cardSub}>✉️ {item.email}</Text>}
-                  {item.gps_lat && (
-                    <Text style={styles.cardGps}>📍 {item.gps_lat.toFixed(4)}, {item.gps_lng?.toFixed(4)}</Text>
+                  {item.gps_lat && item.gps_lng && (
+                    <TouchableOpacity
+                      onPress={() => {
+                        const url = `https://www.google.com/maps/search/?api=1&query=${item.gps_lat},${item.gps_lng}`;
+                        Linking.openURL(url);
+                      }}
+                      style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4, backgroundColor: '#2196F315', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, alignSelf: 'flex-start' }}
+                    >
+                      <FontAwesome name="map-marker" size={12} color="#2196F3" />
+                      <Text style={styles.cardGps}>{item.gps_lat.toFixed(4)}, {item.gps_lng.toFixed(4)}</Text>
+                      <FontAwesome name="external-link" size={9} color="#2196F3" />
+                    </TouchableOpacity>
                   )}
                   {isAdmin && (
                     <Text style={styles.cardCreator}>Added by {item.created_by_name}</Text>
