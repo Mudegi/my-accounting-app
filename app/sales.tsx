@@ -43,6 +43,27 @@ export default function SalesScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const [selectedBranch, setSelectedBranch] = useState<string>('all');
+  const [selectedSeller, setSelectedSeller] = useState<string>('all');
+  const [sellers, setSellers] = useState<{ id: string; name: string }[]>([]);
+  const [productFilter, setProductFilter] = useState('');
+  const [activeProductFilter, setActiveProductFilter] = useState('');
+  const [productStats, setProductStats] = useState<{ name: string; qty: number; revenue: number } | null>(null);
+
+  // Reset seller when branch changes
+  React.useEffect(() => { setSelectedSeller('all'); }, [selectedBranch]);
+
+  // Load sellers for filter
+  useFocusEffect(useCallback(() => {
+    if (!business) return;
+    (async () => {
+      const { data } = await supabase
+        .from('profiles')
+        .select('id, full_name')
+        .eq('business_id', business.id)
+        .order('full_name');
+      setSellers((data || []).map((p: any) => ({ id: p.id, name: p.full_name || 'Unknown' })));
+    })();
+  }, [business]));
 
   const getDateFrom = (p: Period): string | null => {
     const now = new Date();
@@ -58,6 +79,37 @@ export default function SalesScreen() {
   const load = useCallback(async () => {
     if (!business) return;
     const from = getDateFrom(period);
+
+    let productSaleIds: string[] | null = null;
+
+    // Product filter: find matching sale IDs and compute stats
+    if (activeProductFilter) {
+      let itemQuery = supabase
+        .from('sale_items')
+        .select('sale_id, quantity, line_total, sales!inner(business_id, created_at, branch_id, seller_id)')
+        .ilike('product_name', `%${activeProductFilter}%`)
+        .eq('sales.business_id', business.id);
+
+      if (from) itemQuery = itemQuery.gte('sales.created_at', from);
+      if (isAdmin && selectedBranch !== 'all') itemQuery = itemQuery.eq('sales.branch_id', selectedBranch);
+      else if (!isAdmin && currentBranch) itemQuery = itemQuery.eq('sales.branch_id', currentBranch.id);
+      if (selectedSeller !== 'all') itemQuery = itemQuery.eq('sales.seller_id', selectedSeller);
+
+      const { data: matchItems } = await itemQuery.limit(500);
+
+      if (matchItems && matchItems.length > 0) {
+        const totalQty = matchItems.reduce((s: number, i: any) => s + i.quantity, 0);
+        const totalRev = matchItems.reduce((s: number, i: any) => s + Number(i.line_total), 0);
+        setProductStats({ name: activeProductFilter, qty: totalQty, revenue: totalRev });
+        productSaleIds = [...new Set(matchItems.map((i: any) => i.sale_id))];
+      } else {
+        setProductStats({ name: activeProductFilter, qty: 0, revenue: 0 });
+        setSales([]);
+        return;
+      }
+    } else {
+      setProductStats(null);
+    }
 
     let query = supabase
       .from('sales')
@@ -81,6 +133,16 @@ export default function SalesScreen() {
       query = query.eq('branch_id', selectedBranch);
     } else if (!isAdmin && currentBranch) {
       query = query.eq('branch_id', currentBranch.id);
+    }
+
+    // Seller filter
+    if (selectedSeller !== 'all') {
+      query = query.eq('seller_id', selectedSeller);
+    }
+
+    // Product filter: restrict to matching sales
+    if (productSaleIds) {
+      query = query.in('id', productSaleIds);
     }
 
     const { data } = await query;
@@ -125,7 +187,7 @@ export default function SalesScreen() {
         item_count: s.sale_items?.length || 0,
       })));
     }
-  }, [business, currentBranch, period, selectedBranch, isAdmin]);
+  }, [business, currentBranch, period, selectedBranch, selectedSeller, isAdmin, activeProductFilter]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
@@ -213,6 +275,27 @@ export default function SalesScreen() {
               </View>
             )}
 
+            {/* Seller filter (admin only) */}
+            {isAdmin && sellers.length > 1 && (
+              <View style={styles.branchFilter}>
+                <TouchableOpacity
+                  style={[styles.branchChip, selectedSeller === 'all' && styles.sellerChipActive]}
+                  onPress={() => setSelectedSeller('all')}
+                >
+                  <Text style={[styles.branchChipText, selectedSeller === 'all' && styles.branchChipTextActive]}>All Sellers</Text>
+                </TouchableOpacity>
+                {sellers.map(s => (
+                  <TouchableOpacity
+                    key={s.id}
+                    style={[styles.branchChip, selectedSeller === s.id && styles.sellerChipActive]}
+                    onPress={() => setSelectedSeller(s.id)}
+                  >
+                    <Text style={[styles.branchChipText, selectedSeller === s.id && styles.branchChipTextActive]}>{s.name}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+
             {/* Search */}
             <View style={styles.searchContainer}>
               <FontAwesome name="search" size={14} color="#555" style={{ marginRight: 8 }} />
@@ -229,6 +312,43 @@ export default function SalesScreen() {
                 </TouchableOpacity>
               ) : null}
             </View>
+
+            {/* Product filter */}
+            <View style={styles.searchContainer}>
+              <FontAwesome name="cube" size={14} color="#555" style={{ marginRight: 8 }} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Filter by product name..."
+                placeholderTextColor="#555"
+                value={productFilter}
+                onChangeText={setProductFilter}
+                onSubmitEditing={() => setActiveProductFilter(productFilter.trim())}
+                returnKeyType="search"
+              />
+              {activeProductFilter ? (
+                <TouchableOpacity onPress={() => { setProductFilter(''); setActiveProductFilter(''); }}>
+                  <FontAwesome name="times-circle" size={16} color="#e94560" />
+                </TouchableOpacity>
+              ) : productFilter.trim() ? (
+                <TouchableOpacity onPress={() => setActiveProductFilter(productFilter.trim())}>
+                  <FontAwesome name="arrow-right" size={14} color="#e94560" />
+                </TouchableOpacity>
+              ) : null}
+            </View>
+
+            {/* Product stats banner */}
+            {productStats && (
+              <View style={styles.productBanner}>
+                <Text style={styles.productBannerTitle}>{productStats.qty > 0 ? '📦' : '🔍'} "{productStats.name}"</Text>
+                <View style={{ flexDirection: 'row', gap: 16, marginTop: 4, backgroundColor: 'transparent' }}>
+                  <Text style={styles.productBannerStat}>{productStats.qty} units sold</Text>
+                  <Text style={styles.productBannerStat}>{fmt(productStats.revenue)} revenue</Text>
+                </View>
+                <Text style={{ color: '#6b7280', fontSize: 11, marginTop: 4 }}>
+                  Showing {filteredSales.length} receipt{filteredSales.length !== 1 ? 's' : ''} containing this product
+                </Text>
+              </View>
+            )}
           </>
         }
         renderItem={({ item }) => (
@@ -335,4 +455,8 @@ const styles = StyleSheet.create({
   viewDetailText: { color: '#555', fontSize: 12, textAlign: 'right' },
   empty: { alignItems: 'center', paddingTop: 60 },
   emptyText: { color: '#555', fontSize: 16, marginTop: 12 },
+  sellerChipActive: { backgroundColor: '#7C3AED', borderColor: '#7C3AED' },
+  productBanner: { marginHorizontal: 16, marginBottom: 10, padding: 12, backgroundColor: '#1a3a2e', borderRadius: 10, borderWidth: 1, borderColor: '#2d6a4f' },
+  productBannerTitle: { color: '#4ade80', fontWeight: 'bold', fontSize: 14 },
+  productBannerStat: { color: '#a7f3d0', fontSize: 13 },
 });
