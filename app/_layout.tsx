@@ -287,6 +287,30 @@ function RootLayoutNav() {
           name="help"
           options={{ title: 'Help & Guide', headerStyle: { backgroundColor: '#1a1a2e' }, headerTintColor: '#fff' }}
         />
+        <Stack.Screen
+          name="field-sales/assign-stock"
+          options={{ title: 'Assign Field Stock', headerStyle: { backgroundColor: '#1a1a2e' }, headerTintColor: '#fff' }}
+        />
+        <Stack.Screen
+          name="field-sales/my-stock"
+          options={{ title: 'My Assigned Stock', headerStyle: { backgroundColor: '#1a1a2e' }, headerTintColor: '#fff' }}
+        />
+        <Stack.Screen
+          name="field-sales/sell"
+          options={{ title: 'Field Sale', headerStyle: { backgroundColor: '#1a1a2e' }, headerTintColor: '#fff' }}
+        />
+        <Stack.Screen
+          name="field-sales/approve-sales"
+          options={{ title: 'Approve Field Sales', headerStyle: { backgroundColor: '#1a1a2e' }, headerTintColor: '#fff' }}
+        />
+        <Stack.Screen
+          name="field-sales/field-customers"
+          options={{ title: 'Field Customers', headerStyle: { backgroundColor: '#1a1a2e' }, headerTintColor: '#fff' }}
+        />
+        <Stack.Screen
+          name="field-sales/reconciliation"
+          options={{ title: 'Stock Reconciliation', headerStyle: { backgroundColor: '#1a1a2e' }, headerTintColor: '#fff' }}
+        />
         <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
       </Stack>
 

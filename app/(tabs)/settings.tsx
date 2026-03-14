@@ -294,6 +294,45 @@ export default function SettingsScreen() {
         </View>
       )}
 
+      {/* Field Sales */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Field Sales</Text>
+        {isAdmin && (
+          <>
+            <TouchableOpacity style={styles.menuRow} onPress={() => router.push('/field-sales/assign-stock' as any)}>
+              <FontAwesome name="cubes" size={18} color="#FF9800" />
+              <Text style={styles.menuLabel}>Assign Stock to Users</Text>
+              <FontAwesome name="chevron-right" size={14} color="#555" />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.menuRow} onPress={() => router.push('/field-sales/approve-sales' as any)}>
+              <FontAwesome name="check-circle" size={18} color="#4CAF50" />
+              <Text style={styles.menuLabel}>Approve Field Sales</Text>
+              <FontAwesome name="chevron-right" size={14} color="#555" />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.menuRow} onPress={() => router.push('/field-sales/reconciliation' as any)}>
+              <FontAwesome name="pie-chart" size={18} color="#7C3AED" />
+              <Text style={styles.menuLabel}>Stock Reconciliation</Text>
+              <FontAwesome name="chevron-right" size={14} color="#555" />
+            </TouchableOpacity>
+          </>
+        )}
+        <TouchableOpacity style={styles.menuRow} onPress={() => router.push('/field-sales/my-stock' as any)}>
+          <FontAwesome name="archive" size={18} color="#2196F3" />
+          <Text style={styles.menuLabel}>My Assigned Stock</Text>
+          <FontAwesome name="chevron-right" size={14} color="#555" />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.menuRow} onPress={() => router.push('/field-sales/sell' as any)}>
+          <FontAwesome name="map-marker" size={18} color="#e94560" />
+          <Text style={styles.menuLabel}>Field Sale</Text>
+          <FontAwesome name="chevron-right" size={14} color="#555" />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.menuRow} onPress={() => router.push('/field-sales/field-customers' as any)}>
+          <FontAwesome name="address-book" size={18} color="#FF9800" />
+          <Text style={styles.menuLabel}>Field Customers</Text>
+          <FontAwesome name="chevron-right" size={14} color="#555" />
+        </TouchableOpacity>
+      </View>
+
       {/* More Options */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>More</Text>
