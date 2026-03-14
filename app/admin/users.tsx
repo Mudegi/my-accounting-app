@@ -91,66 +91,69 @@ export default function UsersScreen() {
 
     setSaving(true);
 
-    // Check user limit before creating account
-    const { data: limitCheck, error: limitError } = await supabase.rpc('check_user_limit', {
-      p_business_id: business.id,
-    });
-    if (limitError) {
-      console.error('User limit check error:', limitError);
-    } else if (limitCheck && !limitCheck.allowed) {
-      Alert.alert(
-        'User Limit Reached',
-        `Your plan allows ${limitCheck.max_users} user${limitCheck.max_users === 1 ? '' : 's'}. You currently have ${limitCheck.current_count}.\n\nUpgrade your plan to add more users.`
-      );
-      setSaving(false);
-      return;
-    }
+    try {
+      // Check user limit before creating account
+      const { data: limitCheck, error: limitError } = await supabase.rpc('check_user_limit', {
+        p_business_id: business.id,
+      });
+      if (limitError) {
+        console.error('User limit check error:', limitError);
+      } else if (limitCheck && !limitCheck.allowed) {
+        Alert.alert(
+          'User Limit Reached',
+          `Your plan allows ${limitCheck.max_users} user${limitCheck.max_users === 1 ? '' : 's'}. You currently have ${limitCheck.current_count}.\n\nUpgrade your plan to add more users.`
+        );
+        setSaving(false);
+        return;
+      }
 
-    const tempPassword = Math.random().toString(36).slice(-8) + 'A1!';
+      const tempPassword = Math.random().toString(36).slice(-8) + 'A1!';
 
-    // Save admin session before creating new user (signUp may auto-sign-in the new user)
-    const { data: { session: adminSession } } = await supabase.auth.getSession();
+      // Save admin session before creating new user (signUp may auto-sign-in the new user)
+      const { data: { session: adminSession } } = await supabase.auth.getSession();
 
-    const { data, error } = await supabase.auth.signUp({
-      email: email.trim(),
-      password: tempPassword,
-      options: { data: { needs_password_change: true, invited_by: profile.full_name } },
-    });
+      const { data, error } = await supabase.auth.signUp({
+        email: email.trim(),
+        password: tempPassword,
+        options: { data: { needs_password_change: true, invited_by: profile.full_name } },
+      });
 
-    if (error) {
-      // Restore admin session if needed
+      // Restore the admin's session immediately (signUp may have replaced it)
       if (adminSession) {
         await supabase.auth.setSession({ access_token: adminSession.access_token, refresh_token: adminSession.refresh_token });
       }
-      Alert.alert('Error', error.message); setSaving(false); return;
+
+      if (error) {
+        Alert.alert('Error', error.message);
+        setSaving(false);
+        return;
+      }
+
+      const userId = data.user?.id;
+      if (!userId) { Alert.alert('Error', 'Failed to create account. The email may already be registered.'); setSaving(false); return; }
+
+      const { error: profileError } = await supabase.from('profiles').insert({
+        id: userId,
+        business_id: business.id,
+        branch_id: branchId,
+        full_name: fullName.trim(),
+        role,
+      });
+
+      if (profileError) {
+        Alert.alert('Error', profileError.message);
+      } else {
+        Alert.alert(
+          'User Invited',
+          `Account created!\n\nShare these credentials with ${fullName.trim()}:\n\nEmail: ${email.trim()}\nTemp Password: ${tempPassword}\n\nSteps for the new user:\n1. Open YourBooks and sign in with these credentials\n2. If asked, confirm their email first\n3. Go to Settings → Change Password\n4. Set a personal password`,
+          [{ text: 'OK', onPress: () => { setShowInvite(false); setEmail(''); setFullName(''); setRole('salesperson'); setBranchId(''); load(); } }]
+        );
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err?.message || 'Something went wrong while creating the user');
+    } finally {
+      setSaving(false);
     }
-
-    // Restore the admin's session immediately (signUp may have replaced it)
-    if (adminSession) {
-      await supabase.auth.setSession({ access_token: adminSession.access_token, refresh_token: adminSession.refresh_token });
-    }
-
-    const userId = data.user?.id;
-    if (!userId) { Alert.alert('Error', 'Failed to create account'); setSaving(false); return; }
-
-    const { error: profileError } = await supabase.from('profiles').insert({
-      id: userId,
-      business_id: business.id,
-      branch_id: branchId,
-      full_name: fullName.trim(),
-      role,
-    });
-
-    if (profileError) {
-      Alert.alert('Error', profileError.message);
-    } else {
-      Alert.alert(
-        'User Invited',
-        `Account created!\n\nShare these credentials with ${fullName.trim()}:\n\nEmail: ${email.trim()}\nTemp Password: ${tempPassword}\n\nSteps for the new user:\n1. Open YourBooks and sign in with these credentials\n2. If asked, confirm their email first\n3. Go to Settings → Change Password\n4. Set a personal password`,
-        [{ text: 'OK', onPress: () => { setShowInvite(false); setEmail(''); setFullName(''); setRole('salesperson'); setBranchId(''); load(); } }]
-      );
-    }
-    setSaving(false);
   };
 
   const handleRoleChange = (userId: string, newRole: string, userName: string) => {
