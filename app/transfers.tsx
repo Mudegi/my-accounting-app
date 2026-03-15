@@ -16,6 +16,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useFocusEffect } from 'expo-router';
+import { postStockTransferEntry } from '@/lib/accounting';
 
 type Transfer = {
   id: string;
@@ -165,14 +166,36 @@ export default function TransfersScreen() {
       }));
       await supabase.from('stock_transfer_items').insert(transferItems);
 
-      // Deduct from source branch for each item
+      // Deduct from source branch and calculate total transfer value
+      let totalValue = 0;
       for (const item of cart) {
-        await supabase.rpc('decrement_inventory', {
+        const { data: avcoValue } = await supabase.rpc('decrement_inventory', {
           p_branch_id: currentBranch.id,
           p_product_id: item.product_id,
           p_quantity: item.quantity,
         });
+        totalValue += (Number(avcoValue) || 0) * item.quantity;
       }
+
+      // Post accounting entry (Transfer Out)
+      const destBranchName = otherBranches.find(b => b.id === toBranchId)?.name || '?';
+      await postStockTransferEntry({
+        businessId: business.id,
+        branchId: currentBranch.id,
+        transferId: transfer.id,
+        value: totalValue,
+        type: 'send',
+        otherBranchName: destBranchName,
+        userId: profile.id,
+      });
+
+      // Update transfer notes to include the value for the destination branch
+      await supabase
+        .from('stock_transfers')
+        .update({ 
+          notes: (notes.trim() ? notes.trim() + ' ' : '') + `[VALUE:${totalValue.toFixed(2)}]`
+        })
+        .eq('id', transfer.id);
 
       const itemsSummary = cart.map(c => `${c.quantity}× ${c.product_name}`).join('\n');
       Alert.alert('Transfer Sent', `Stock is now "In Transit". Destination branch must confirm receipt.\n\n${itemsSummary}`);
@@ -203,11 +226,28 @@ export default function TransfersScreen() {
               .select('*')
               .eq('transfer_id', transferId);
 
+            // Extract value from notes if present
+            const valueMatch = transfer.notes?.match(/\[VALUE:([\d.]+)\]/);
+            const totalValue = valueMatch ? parseFloat(valueMatch[1]) : 0;
+
             for (const item of (items || [])) {
               await supabase.rpc('increment_inventory', {
                 p_branch_id: currentBranch.id,
                 p_product_id: item.product_id,
                 p_quantity: item.quantity,
+              });
+            }
+
+            // Post accounting entry (Transfer In)
+            if (totalValue > 0) {
+              await postStockTransferEntry({
+                businessId: business.id,
+                branchId: currentBranch.id,
+                transferId: transferId,
+                value: totalValue,
+                type: 'receive',
+                otherBranchName: transfer.from_branch,
+                userId: profile?.id,
               });
             }
 
@@ -238,7 +278,7 @@ export default function TransfersScreen() {
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
     <View style={styles.container}>
-      {otherBranches.length > 0 && (
+      {business && otherBranches.length > 0 && (
         <TouchableOpacity style={styles.addButton} onPress={() => setShowForm(true)}>
           <FontAwesome name="exchange" size={16} color="#fff" />
           <Text style={styles.addButtonText}>Send Stock to Another Branch</Text>

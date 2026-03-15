@@ -296,7 +296,7 @@ export default function SalesScreen() {
     if (data === lastScannedCode) return;
     setLastScannedCode(data);
     if (scanTimeoutRef.current) clearTimeout(scanTimeoutRef.current);
-    scanTimeoutRef.current = setTimeout(() => setLastScannedCode(''), 2000);
+    timeoutRef.current = setTimeout(() => setLastScannedCode(''), 2000) as any;
     lookupBarcode(data);
   };
 
@@ -479,25 +479,20 @@ export default function SalesScreen() {
 
       if (itemsError) throw itemsError;
 
-      // Decrement inventory for each sold item
+      // Decrement inventory and calculate true COGS using AVCO returned from DB
+      let actualCOGS = 0;
       for (const item of cart) {
-        const { data: inv } = await supabase
-          .from('inventory')
-          .select('quantity')
-          .eq('product_id', item.product_id)
-          .eq('branch_id', currentBranch.id)
-          .single();
-        if (inv) {
-          await supabase
-            .from('inventory')
-            .update({ quantity: Math.max(0, inv.quantity - item.quantity) })
-            .eq('product_id', item.product_id)
-            .eq('branch_id', currentBranch.id);
-        }
+        const { data: avcoValue } = await supabase.rpc('decrement_inventory', {
+          p_branch_id: currentBranch.id,
+          p_product_id: item.product_id,
+          p_quantity: item.quantity,
+        });
+        
+        // Accumulate COGS: retrieved AVCO * quantity sold
+        actualCOGS += (Number(avcoValue) || 0) * item.quantity;
       }
 
-      // Auto-post accounting entry
-      const costOfGoods = cart.reduce((sum, item) => sum + item.cost_price * item.quantity, 0);
+      // Auto-post accounting entry with accurate COGS
       postSaleEntry({
         businessId: business.id,
         branchId: currentBranch.id,
@@ -505,7 +500,7 @@ export default function SalesScreen() {
         subtotal: subtotalAmount,
         taxAmount: Math.round(taxAmount),
         totalAmount: Math.round(totalAmount),
-        costOfGoods,
+        costOfGoods: actualCOGS,
         discountAmount: discountAmount,
         paymentMethod: salePayMethod,
         userId: profile.id,

@@ -52,6 +52,7 @@ export const ACC = {
   TAXES_LICENSES:     '6100',
   DEPRECIATION:       '6200',
   MISC_EXPENSE:       '6300',
+  STOCK_TRANSFERS:    '6400',  // Clearing account for inter-branch value movement
 } as const;
 
 // Map expense categories → account codes
@@ -303,6 +304,70 @@ export async function postSupplierPaymentEntry(params: {
   ];
 
   return postJournalEntry(businessId, branchId, 'supplier_payment', paymentId, `Supplier payment: ${supplierName}`, lines, userId);
+}
+
+// ════════════════════════════════════════════════════════════
+// AUTO-POST: CUSTOMER PAYMENT (Receivable reduction)
+// ════════════════════════════════════════════════════════════
+// DR Cash/MoMo/Bank     amount (asset goes up)
+// CR Accounts Receivable amount (asset goes down)
+
+export async function postCustomerPaymentEntry(params: {
+  businessId: string;
+  branchId: string | null;
+  paymentId: string;
+  amount: number;
+  customerName: string;
+  paymentMethod: string;
+  userId?: string;
+}) {
+  const { businessId, branchId, paymentId, amount, customerName, paymentMethod, userId } = params;
+  const payAcct = PAYMENT_ACCOUNT_MAP[paymentMethod] || ACC.CASH;
+
+  const lines: JournalLine[] = [
+    { accountCode: payAcct, debit: amount, description: `Payment from customer (${paymentMethod})` },
+    { accountCode: ACC.ACCOUNTS_RECEIVABLE, credit: amount, description: `Receivable cleared - ${customerName}` },
+  ];
+
+  return postJournalEntry(businessId, branchId, 'customer_payment', paymentId, `Customer payment: ${customerName}`, lines, userId);
+}
+
+// ════════════════════════════════════════════════════════════
+// AUTO-POST: STOCK TRANSFER (Inter-branch movement)
+// ════════════════════════════════════════════════════════════
+// At Source Branch (Sender):
+//   DR Stock Transfers (6400)   value
+//   CR Inventory (1200)         value
+//
+// At Destination Branch (Receiver):
+//   DR Inventory (1200)         value
+//   CR Stock Transfers (6400)   value
+//
+// The 'Stock Transfers' account acts as a clearing account. 
+// If it has a balance, it means stock is "In Transit".
+
+export async function postStockTransferEntry(params: {
+  businessId: string;
+  branchId: string;
+  transferId: string;
+  value: number;
+  type: 'send' | 'receive';
+  otherBranchName: string;
+  userId?: string;
+}) {
+  const { businessId, branchId, transferId, value, type, otherBranchName, userId } = params;
+
+  const lines: JournalLine[] = type === 'send' 
+    ? [
+        { accountCode: ACC.STOCK_TRANSFERS, debit: value, description: `Stock sent to ${otherBranchName}` },
+        { accountCode: ACC.INVENTORY, credit: value, description: `Inventory removed (transfer out)` },
+      ]
+    : [
+        { accountCode: ACC.INVENTORY, debit: value, description: `Inventory added (transfer in)` },
+        { accountCode: ACC.STOCK_TRANSFERS, credit: value, description: `Stock received from ${otherBranchName}` },
+      ];
+
+  return postJournalEntry(businessId, branchId, 'stock_transfer', transferId, `Transfer ${type}: ${otherBranchName}`, lines, userId);
 }
 
 // ════════════════════════════════════════════════════════════

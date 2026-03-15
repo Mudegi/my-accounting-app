@@ -17,7 +17,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { postSaleEntry, postSupplierPaymentEntry, PAYMENT_METHODS, ACC, PAYMENT_ACCOUNT_MAP } from '@/lib/accounting';
+import { postSaleEntry, postSupplierPaymentEntry, postCustomerPaymentEntry, PAYMENT_METHODS, ACC, PAYMENT_ACCOUNT_MAP } from '@/lib/accounting';
 
 type DebtCustomer = {
   id: string;
@@ -566,52 +566,18 @@ export default function DebtsScreen() {
 
       if (error) throw error;
 
-      // Post accounting entry: DR Cash/MoMo/Bank, CR Accounts Receivable
-      const payAcct = PAYMENT_ACCOUNT_MAP[payMethod] || ACC.CASH;
-      // We use a manual journal entry approach
-      const { data: accounts } = await supabase
-        .from('accounts')
-        .select('id, code')
-        .eq('business_id', business.id)
-        .in('code', [payAcct, ACC.ACCOUNTS_RECEIVABLE]);
-
-      if (accounts && accounts.length === 2) {
-        const accMap: Record<string, string> = {};
-        accounts.forEach((a: any) => { accMap[a.code] = a.id; });
-
-        const { data: entry } = await supabase
-          .from('journal_entries')
-          .insert({
-            business_id: business.id,
-            branch_id: currentBranch?.id || null,
-            reference_type: 'debt_payment',
-            reference_id: payingSale.id,
-            description: `Debt payment from ${selectedCustomer!.name}`,
-            is_auto: true,
-            created_by: profile.id,
-          })
-          .select()
-          .single();
-
-        if (entry) {
-          await supabase.from('journal_entry_lines').insert([
-            {
-              journal_entry_id: entry.id,
-              account_id: accMap[payAcct],
-              debit: amount,
-              credit: 0,
-              description: `Payment received (${payMethod})`,
-            },
-            {
-              journal_entry_id: entry.id,
-              account_id: accMap[ACC.ACCOUNTS_RECEIVABLE],
-              debit: 0,
-              credit: amount,
-              description: `Receivable cleared - ${selectedCustomer!.name}`,
-            },
-          ]);
-        }
-      }
+      if (error) throw error;
+      
+      // Post accounting entry via helper
+      await postCustomerPaymentEntry({
+        businessId: business.id,
+        branchId: currentBranch?.id || null,
+        paymentId: payingSale.id, // Linking to the sale for reference
+        amount,
+        customerName: selectedCustomer!.name,
+        paymentMethod: payMethod,
+        userId: profile.id,
+      });
 
       Alert.alert('Success', `Payment of ${fmt(amount)} recorded`);
       setShowPayment(false);
