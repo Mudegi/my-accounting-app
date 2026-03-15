@@ -8,21 +8,31 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Modal,
 } from 'react-native';
 import { Text, View } from '@/components/Themed';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useAuth } from '@/lib/auth';
+import { supabase } from '@/lib/supabase';
 
 export default function LoginScreen() {
-  const { signIn, signUp, resetPassword } = useAuth();
+  const { signIn, signUp } = useAuth();
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [businessName, setBusinessName] = useState('');
   const [loading, setLoading] = useState(false);
-  const [resetLoading, setResetLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+
+  // Forgot password OTP flow
+  const [showResetModal, setShowResetModal] = useState(false);
+  const [resetStep, setResetStep] = useState<'email' | 'otp'>('email');
+  const [resetEmail, setResetEmail] = useState('');
+  const [otpCode, setOtpCode] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [resetLoading, setResetLoading] = useState(false);
 
   const handleSignIn = async () => {
     if (!email || !password) {
@@ -45,23 +55,74 @@ export default function LoginScreen() {
     setLoading(false);
   };
 
-  const handleForgotPassword = async () => {
-    if (!email.trim()) {
-      Alert.alert('Enter Email', 'Please enter your email address first, then tap "Forgot Password".');
+  // Step 1: Send OTP to email
+  const handleSendOtp = async () => {
+    if (!resetEmail.trim()) {
+      Alert.alert('Error', 'Please enter your email address');
       return;
     }
     setResetLoading(true);
-    const { error } = await resetPassword(email.trim());
+    const { error } = await supabase.auth.resetPasswordForEmail(resetEmail.trim());
     setResetLoading(false);
     if (error) {
       Alert.alert('Error', error.message);
     } else {
+      setResetStep('otp');
       Alert.alert(
-        'Password Reset Sent',
-        `We've sent a password reset link to ${email.trim()}.\n\nCheck your email (including spam folder), tap the link, and set a new password.`,
-        [{ text: 'OK' }]
+        'Code Sent ✉️',
+        `We sent a 6-digit code to ${resetEmail.trim()}.\n\nCheck your email (including spam folder) and enter the code below.`
       );
     }
+  };
+
+  // Step 2: Verify OTP and set new password
+  const handleResetPassword = async () => {
+    if (!otpCode.trim()) { Alert.alert('Error', 'Enter the 6-digit code from your email'); return; }
+    if (!newPassword.trim() || newPassword.trim().length < 6) { Alert.alert('Error', 'New password must be at least 6 characters'); return; }
+    if (newPassword !== confirmPassword) { Alert.alert('Error', 'Passwords do not match'); return; }
+
+    setResetLoading(true);
+    // Verify OTP token
+    const { error: verifyError } = await supabase.auth.verifyOtp({
+      email: resetEmail.trim(),
+      token: otpCode.trim(),
+      type: 'recovery',
+    });
+
+    if (verifyError) {
+      setResetLoading(false);
+      Alert.alert('Invalid Code', 'The code is incorrect or has expired. Please try again.');
+      return;
+    }
+
+    // Now update the password (user is now authenticated via OTP)
+    const { error: updateError } = await supabase.auth.updateUser({
+      password: newPassword.trim(),
+    });
+    setResetLoading(false);
+
+    if (updateError) {
+      Alert.alert('Error', updateError.message);
+    } else {
+      Alert.alert('Password Reset ✅', 'Your password has been changed. You can now sign in with your new password.');
+      // Sign out so they login with new password
+      await supabase.auth.signOut();
+      closeResetModal();
+    }
+  };
+
+  const closeResetModal = () => {
+    setShowResetModal(false);
+    setResetStep('email');
+    setResetEmail('');
+    setOtpCode('');
+    setNewPassword('');
+    setConfirmPassword('');
+  };
+
+  const openResetModal = () => {
+    setResetEmail(email.trim()); // Pre-fill with login email if entered
+    setShowResetModal(true);
   };
 
   const handleSignUp = async () => {
@@ -78,7 +139,7 @@ export default function LoginScreen() {
     if (error) {
       Alert.alert('Sign Up Failed', error.message);
     } else {
-      Alert.alert('Success', 'Account created! Please check your email to verify, then sign in.');
+      Alert.alert('Success', 'Account created! You can now sign in.');
       setIsSignUp(false);
     }
     setLoading(false);
@@ -179,14 +240,9 @@ export default function LoginScreen() {
           {!isSignUp && (
             <TouchableOpacity
               style={styles.forgotButton}
-              onPress={handleForgotPassword}
-              disabled={resetLoading}
+              onPress={openResetModal}
             >
-              {resetLoading ? (
-                <ActivityIndicator size="small" color="#888" />
-              ) : (
-                <Text style={styles.forgotText}>Forgot Password?</Text>
-              )}
+              <Text style={styles.forgotText}>Forgot Password?</Text>
             </TouchableOpacity>
           )}
 
@@ -207,6 +263,96 @@ export default function LoginScreen() {
           )}
         </View>
       </ScrollView>
+
+      {/* Forgot Password OTP Modal */}
+      <Modal visible={showResetModal} animationType="slide" transparent>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <ScrollView>
+              <Text style={styles.modalTitle}>
+                {resetStep === 'email' ? 'Reset Password' : 'Enter Code & New Password'}
+              </Text>
+
+              {resetStep === 'email' ? (
+                <>
+                  <Text style={styles.modalHint}>
+                    Enter your email address. We'll send you a 6-digit code to reset your password.
+                  </Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    placeholder="Email address"
+                    placeholderTextColor="#555"
+                    value={resetEmail}
+                    onChangeText={setResetEmail}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    autoFocus
+                  />
+                  <TouchableOpacity
+                    style={[styles.modalBtn, resetLoading && { opacity: 0.6 }]}
+                    onPress={handleSendOtp}
+                    disabled={resetLoading}
+                  >
+                    {resetLoading ? <ActivityIndicator color="#fff" /> : (
+                      <Text style={styles.modalBtnText}>Send Reset Code</Text>
+                    )}
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <>
+                  <Text style={styles.modalHint}>
+                    Check your email ({resetEmail}) for a 6-digit code. Enter it below with your new password.
+                  </Text>
+                  <TextInput
+                    style={[styles.modalInput, { textAlign: 'center', fontSize: 24, letterSpacing: 8 }]}
+                    placeholder="000000"
+                    placeholderTextColor="#555"
+                    value={otpCode}
+                    onChangeText={setOtpCode}
+                    keyboardType="number-pad"
+                    maxLength={6}
+                    autoFocus
+                  />
+                  <TextInput
+                    style={styles.modalInput}
+                    placeholder="New password (min 6 chars)"
+                    placeholderTextColor="#555"
+                    value={newPassword}
+                    onChangeText={setNewPassword}
+                    secureTextEntry
+                  />
+                  <TextInput
+                    style={styles.modalInput}
+                    placeholder="Confirm new password"
+                    placeholderTextColor="#555"
+                    value={confirmPassword}
+                    onChangeText={setConfirmPassword}
+                    secureTextEntry
+                  />
+                  <TouchableOpacity
+                    style={[styles.modalBtn, resetLoading && { opacity: 0.6 }]}
+                    onPress={handleResetPassword}
+                    disabled={resetLoading}
+                  >
+                    {resetLoading ? <ActivityIndicator color="#fff" /> : (
+                      <Text style={styles.modalBtnText}>Reset Password</Text>
+                    )}
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => setResetStep('email')} style={{ marginTop: 10, alignItems: 'center' }}>
+                    <Text style={{ color: '#aaa', fontSize: 13 }}>← Back / Resend code</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+
+              <TouchableOpacity style={styles.modalCancel} onPress={closeResetModal}>
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -316,4 +462,14 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
   },
+  // Modal styles
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', padding: 20 },
+  modalContent: { backgroundColor: '#1a1a2e', borderRadius: 20, padding: 24, maxHeight: '80%' },
+  modalTitle: { fontSize: 22, fontWeight: 'bold', color: '#fff', marginBottom: 12 },
+  modalHint: { color: '#aaa', fontSize: 14, marginBottom: 16, lineHeight: 20 },
+  modalInput: { backgroundColor: '#16213e', borderRadius: 12, padding: 14, fontSize: 16, color: '#fff', marginBottom: 12, borderWidth: 1, borderColor: '#0f3460' },
+  modalBtn: { backgroundColor: '#e94560', borderRadius: 12, padding: 16, alignItems: 'center', marginTop: 4 },
+  modalBtnText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+  modalCancel: { padding: 14, alignItems: 'center', marginTop: 8 },
+  modalCancelText: { color: '#888', fontSize: 15 },
 });
