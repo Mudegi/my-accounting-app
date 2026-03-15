@@ -44,6 +44,7 @@ export default function UsersScreen() {
   const [showInvite, setShowInvite] = useState(false);
   const [email, setEmail] = useState('');
   const [fullName, setFullName] = useState('');
+  const [password, setPassword] = useState('');
   const [role, setRole] = useState<string>('salesperson');
   const [branchId, setBranchId] = useState('');
   const [saving, setSaving] = useState(false);
@@ -86,6 +87,7 @@ export default function UsersScreen() {
 
   const handleInvite = async () => {
     if (!email.trim() || !fullName.trim()) { Alert.alert('Error', 'Enter name and email'); return; }
+    if (!password.trim() || password.trim().length < 6) { Alert.alert('Error', 'Password must be at least 6 characters'); return; }
     if (!branchId) { Alert.alert('Error', 'Select a branch for this user'); return; }
     if (!business || !profile) return;
 
@@ -107,15 +109,16 @@ export default function UsersScreen() {
         return;
       }
 
-      const tempPassword = Math.random().toString(36).slice(-8) + 'A1!';
-
       // Save admin session before creating new user (signUp may auto-sign-in the new user)
       const { data: { session: adminSession } } = await supabase.auth.getSession();
 
       const { data, error } = await supabase.auth.signUp({
         email: email.trim(),
-        password: tempPassword,
-        options: { data: { needs_password_change: true, invited_by: profile.full_name } },
+        password: password.trim(),
+        options: {
+          data: { invited_by: profile.full_name },
+          emailRedirectTo: undefined, // Prevent redirect issues
+        },
       });
 
       // Restore the admin's session immediately (signUp may have replaced it)
@@ -144,9 +147,9 @@ export default function UsersScreen() {
         Alert.alert('Error', profileError.message);
       } else {
         Alert.alert(
-          'User Invited',
-          `Account created!\n\nShare these credentials with ${fullName.trim()}:\n\nEmail: ${email.trim()}\nTemp Password: ${tempPassword}\n\nSteps for the new user:\n1. Open YourBooks and sign in with these credentials\n2. If asked, confirm their email first\n3. Go to Settings → Change Password\n4. Set a personal password`,
-          [{ text: 'OK', onPress: () => { setShowInvite(false); setEmail(''); setFullName(''); setRole('salesperson'); setBranchId(''); load(); } }]
+          'User Created ✅',
+          `Share these login credentials with ${fullName.trim()}:\n\n📧 Email: ${email.trim()}\n🔑 Password: ${password.trim()}\n\nThey can now open YourBooks and sign in immediately.`,
+          [{ text: 'OK', onPress: () => { setShowInvite(false); setEmail(''); setFullName(''); setPassword(''); setRole('salesperson'); setBranchId(''); load(); } }]
         );
       }
     } catch (err: any) {
@@ -281,9 +284,10 @@ export default function UsersScreen() {
 
       {showInvite && (
         <View style={styles.formCard}>
-          <Text style={styles.formTitle}>Invite User</Text>
+          <Text style={styles.formTitle}>Create User</Text>
           <TextInput style={styles.input} placeholder="Full Name" placeholderTextColor="#555" value={fullName} onChangeText={setFullName} />
           <TextInput style={styles.input} placeholder="Email Address" placeholderTextColor="#555" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" />
+          <TextInput style={styles.input} placeholder="Password (min 6 characters)" placeholderTextColor="#555" value={password} onChangeText={setPassword} secureTextEntry />
 
           <Text style={styles.label}>Role</Text>
           <View style={styles.chipRow}>
@@ -308,7 +312,7 @@ export default function UsersScreen() {
               <Text style={styles.cancelText}>Cancel</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.saveBtn} onPress={handleInvite} disabled={saving}>
-              {saving ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.saveText}>Send Invite</Text>}
+              {saving ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.saveText}>Create User</Text>}
             </TouchableOpacity>
           </View>
         </View>

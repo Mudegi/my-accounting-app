@@ -41,6 +41,7 @@ export default function AssignStockScreen() {
   const [qty, setQty] = useState('');
   const [notes, setNotes] = useState('');
   const [filterUser, setFilterUser] = useState('all');
+  const [productSearch, setProductSearch] = useState('');
 
   const load = useCallback(async () => {
     if (!business) return;
@@ -116,7 +117,7 @@ export default function AssignStockScreen() {
       const prodName = products.find(p => p.id === selectedProduct)?.name || 'product';
       Alert.alert('Stock Assigned', `${qtyNum} × ${prodName} assigned to ${userName}.`);
       setShowForm(false);
-      setSelectedUser(''); setSelectedProduct(''); setQty(''); setNotes('');
+      setSelectedUser(''); setSelectedProduct(''); setQty(''); setNotes(''); setProductSearch('');
       load();
     }
   };
@@ -253,25 +254,65 @@ export default function AssignStockScreen() {
               </View>
 
               <Text style={styles.label}>Product *</Text>
-              <View style={styles.chipRow}>
-                {products.length === 0 ? (
-                  <Text style={{ color: '#555', fontSize: 13 }}>
-                    {selectedBranch ? 'No products with stock in this branch' : 'Select a branch first'}
-                  </Text>
-                ) : (
-                  products.map(p => (
-                    <TouchableOpacity
-                      key={p.id}
-                      style={[styles.formChip, selectedProduct === p.id && styles.formChipActive]}
-                      onPress={() => setSelectedProduct(p.id)}
-                    >
-                      <Text style={[styles.formChipText, selectedProduct === p.id && { color: '#fff' }]}>
-                        {p.name} ({p.quantity})
-                      </Text>
-                    </TouchableOpacity>
-                  ))
-                )}
-              </View>
+              {selectedProduct ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'transparent' }}>
+                  <View style={[styles.formChip, styles.formChipActive, { flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
+                    <Text style={{ color: '#fff', fontSize: 14, fontWeight: 'bold' }}>
+                      {products.find(p => p.id === selectedProduct)?.name} ({products.find(p => p.id === selectedProduct)?.quantity})
+                    </Text>
+                  </View>
+                  <TouchableOpacity onPress={() => { setSelectedProduct(''); setProductSearch(''); }}>
+                    <FontAwesome name="times-circle" size={22} color="#e94560" />
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <>
+                  <View style={styles.searchBox}>
+                    <FontAwesome name="search" size={14} color="#555" />
+                    <TextInput
+                      style={styles.searchInput}
+                      placeholder={selectedBranch ? 'Search product by name...' : 'Select a branch first'}
+                      placeholderTextColor="#555"
+                      value={productSearch}
+                      onChangeText={setProductSearch}
+                      editable={!!selectedBranch}
+                    />
+                    {productSearch.length > 0 && (
+                      <TouchableOpacity onPress={() => setProductSearch('')}>
+                        <FontAwesome name="times" size={14} color="#555" />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                  {products.length === 0 && selectedBranch ? (
+                    <Text style={{ color: '#555', fontSize: 13, marginTop: 6 }}>No products with stock in this branch</Text>
+                  ) : (
+                    <View style={styles.productList}>
+                      {products
+                        .filter(p => !productSearch.trim() || p.name.toLowerCase().includes(productSearch.toLowerCase()))
+                        .slice(0, 8)
+                        .map(p => (
+                          <TouchableOpacity
+                            key={p.id}
+                            style={styles.productItem}
+                            onPress={() => { setSelectedProduct(p.id); setProductSearch(''); }}
+                          >
+                            <Text style={styles.productItemName}>{p.name}</Text>
+                            <View style={styles.productQtyBadge}>
+                              <Text style={styles.productQtyText}>{p.quantity} in stock</Text>
+                            </View>
+                          </TouchableOpacity>
+                        ))
+                      }
+                      {products.filter(p => !productSearch.trim() || p.name.toLowerCase().includes(productSearch.toLowerCase())).length === 0 && productSearch.trim() && (
+                        <Text style={{ color: '#555', fontSize: 13, paddingVertical: 8 }}>No products matching "{productSearch}"</Text>
+                      )}
+                      {products.filter(p => !productSearch.trim() || p.name.toLowerCase().includes(productSearch.toLowerCase())).length > 8 && (
+                        <Text style={{ color: '#666', fontSize: 12, paddingVertical: 4 }}>Type to search... {products.length} products total</Text>
+                      )}
+                    </View>
+                  )}
+                </>
+              )}
 
               <Text style={styles.label}>Quantity *</Text>
               <TextInput
@@ -350,4 +391,11 @@ const styles = StyleSheet.create({
   saveBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
   cancelBtn: { padding: 14, alignItems: 'center', marginTop: 8 },
   cancelBtnText: { color: '#aaa', fontSize: 15 },
+  searchBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#16213e', borderRadius: 10, paddingHorizontal: 12, borderWidth: 1, borderColor: '#0f3460', gap: 8, marginTop: 4 },
+  searchInput: { flex: 1, color: '#fff', fontSize: 15, paddingVertical: 12 },
+  productList: { marginTop: 6, maxHeight: 240, backgroundColor: 'transparent' },
+  productItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#16213e', borderRadius: 10, padding: 12, marginBottom: 6, borderWidth: 1, borderColor: '#0f3460' },
+  productItemName: { color: '#fff', fontSize: 14, fontWeight: '600', flex: 1 },
+  productQtyBadge: { backgroundColor: '#0f3460', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3, marginLeft: 8 },
+  productQtyText: { color: '#aaa', fontSize: 11, fontWeight: '600' },
 });
