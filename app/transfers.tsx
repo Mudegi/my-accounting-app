@@ -211,7 +211,7 @@ export default function TransfersScreen() {
 
   const handleReceive = async (transferId: string) => {
     const transfer = transfers.find((t) => t.id === transferId);
-    if (!transfer || !currentBranch) return;
+    if (!transfer || !currentBranch || !business) return;
 
     Alert.alert(
       'Confirm Receipt',

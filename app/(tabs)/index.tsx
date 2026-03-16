@@ -296,7 +296,7 @@ export default function SalesScreen() {
     if (data === lastScannedCode) return;
     setLastScannedCode(data);
     if (scanTimeoutRef.current) clearTimeout(scanTimeoutRef.current);
-    timeoutRef.current = setTimeout(() => setLastScannedCode(''), 2000) as any;
+    scanTimeoutRef.current = setTimeout(() => setLastScannedCode(''), 2000) as any;
     lookupBarcode(data);
   };
 
@@ -531,25 +531,26 @@ export default function SalesScreen() {
                 created_by: profile.id,
               });
 
-              await supabase.rpc('increment_loyalty_points', {
-                p_customer_id: creditCustomer.id,
-                p_points: pointsEarned,
-              }).then(() => {}).catch(() => {
+              try {
+                await supabase.rpc('increment_loyalty_points', {
+                  p_customer_id: creditCustomer.id,
+                  p_points: pointsEarned,
+                });
+              } catch (e) {
                 // Fallback if RPC doesn't exist: direct update
-                supabase
+                const { data } = await supabase
                   .from('customers')
                   .select('loyalty_points')
                   .eq('id', creditCustomer.id)
-                  .single()
-                  .then(({ data }) => {
-                    if (data) {
-                      supabase
-                        .from('customers')
-                        .update({ loyalty_points: (data.loyalty_points || 0) + pointsEarned })
-                        .eq('id', creditCustomer.id);
-                    }
-                  });
-              });
+                  .single();
+                
+                if (data) {
+                  await supabase
+                    .from('customers')
+                    .update({ loyalty_points: (data.loyalty_points || 0) + pointsEarned })
+                    .eq('id', creditCustomer.id);
+                }
+              }
             }
           }
         } catch (_) { /* loyalty is non-critical */ }
@@ -1334,6 +1335,7 @@ const styles = StyleSheet.create({
   modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#fff' },
   searchInput: { backgroundColor: '#16213e', borderRadius: 12, padding: 14, fontSize: 16, color: '#fff', borderWidth: 1, borderColor: '#0f3460', marginBottom: 12 },
   searchResultItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#16213e', borderRadius: 10, padding: 14, marginBottom: 8 },
+  productRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#16213e', borderRadius: 10, padding: 14, marginBottom: 8 },
   resultImage: { width: 44, height: 44, borderRadius: 8, marginRight: 12 },
   resultImagePlaceholder: { width: 44, height: 44, borderRadius: 8, backgroundColor: '#0f3460', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
   searchResultInfo: { flex: 1, backgroundColor: 'transparent' },

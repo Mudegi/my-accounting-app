@@ -11,7 +11,8 @@ import {
   Platform,
 } from 'react-native';
 import { Text, View } from '@/components/Themed';
-import { supabase } from '@/lib/supabase';
+import { supabase, supabaseUrl, supabaseAnonKey } from '@/lib/supabase';
+import { createClient } from '@supabase/supabase-js';
 import { useAuth } from '@/lib/auth';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useFocusEffect, useRouter, Redirect } from 'expo-router';
@@ -91,46 +92,41 @@ export default function UsersScreen() {
     if (!branchId) { Alert.alert('Error', 'Select a branch for this user'); return; }
     if (!business || !profile) return;
 
-    setSaving(true);
+      setSaving(true);
+  
+      try {
+        // Check user limit before creating account
+        const { data: limitCheck, error: limitError } = await supabase.rpc('check_user_limit', {
+          p_business_id: business.id,
+        });
+        
+        if (limitCheck && !limitCheck.allowed) {
+          Alert.alert(
+            'User Limit Reached',
+            `Your plan allows ${limitCheck.max_users} user${limitCheck.max_users === 1 ? '' : 's'}. You currently have ${limitCheck.current_count}.\n\nUpgrade your plan to add more users.`
+          );
+          setSaving(false);
+          return;
+        }
 
-    try {
-      // Check user limit before creating account
-      const { data: limitCheck, error: limitError } = await supabase.rpc('check_user_limit', {
-        p_business_id: business.id,
-      });
-      if (limitError) {
-        console.error('User limit check error:', limitError);
-      } else if (limitCheck && !limitCheck.allowed) {
-        Alert.alert(
-          'User Limit Reached',
-          `Your plan allows ${limitCheck.max_users} user${limitCheck.max_users === 1 ? '' : 's'}. You currently have ${limitCheck.current_count}.\n\nUpgrade your plan to add more users.`
-        );
-        setSaving(false);
-        return;
-      }
+        // Use a temporary client with persistSession: false to avoid logging OUT the admin
+        const tempSupabase = createClient(supabaseUrl, supabaseAnonKey, {
+          auth: { persistSession: false }
+        });
 
-      // Save admin session before creating new user (signUp may auto-sign-in the new user)
-      const { data: { session: adminSession } } = await supabase.auth.getSession();
+        const { data, error } = await tempSupabase.auth.signUp({
+          email: email.trim(),
+          password: password.trim(),
+          options: {
+            data: { invited_by: profile.full_name },
+          },
+        });
 
-      const { data, error } = await supabase.auth.signUp({
-        email: email.trim(),
-        password: password.trim(),
-        options: {
-          data: { invited_by: profile.full_name },
-          emailRedirectTo: undefined, // Prevent redirect issues
-        },
-      });
-
-      // Restore the admin's session immediately (signUp may have replaced it)
-      if (adminSession) {
-        await supabase.auth.setSession({ access_token: adminSession.access_token, refresh_token: adminSession.refresh_token });
-      }
-
-      if (error) {
-        Alert.alert('Error', error.message);
-        setSaving(false);
-        return;
-      }
+        if (error) {
+          Alert.alert('Error', error.message);
+          setSaving(false);
+          return;
+        }
 
       const userId = data.user?.id;
       if (!userId) { Alert.alert('Error', 'Failed to create account. The email may already be registered.'); setSaving(false); return; }
