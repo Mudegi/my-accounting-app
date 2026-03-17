@@ -4,6 +4,7 @@
 
 -- Add policy to allow admins to insert profiles for their own business
 -- This is required because handleInvite manually inserts the profile after signUp
+DROP POLICY IF EXISTS "Admins can insert profiles" ON profiles;
 CREATE POLICY "Admins can insert profiles"
   ON profiles FOR INSERT
   WITH CHECK (
@@ -13,6 +14,7 @@ CREATE POLICY "Admins can insert profiles"
   );
 
 -- Also ensure admins can delete profiles (for soft delete/permanent removal if needed)
+DROP POLICY IF EXISTS "Admins can delete profiles" ON profiles;
 CREATE POLICY "Admins can delete profiles"
   ON profiles FOR DELETE
   USING (
