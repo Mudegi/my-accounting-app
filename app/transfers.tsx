@@ -129,7 +129,7 @@ export default function TransfersScreen() {
 
   const handleCreate = async () => {
     if (!toBranchId) { Alert.alert('Error', 'Select a destination branch'); return; }
-    if (cart.length === 0) { Alert.alert('Error', 'Add at least one product to transfer'); return; }
+    if (cart.length === 0) { Alert.alert('Error', 'Add at least one product to the transfer'); return; }
     if (!business || !currentBranch || !profile) return;
 
     // Validate all quantities
@@ -143,6 +143,27 @@ export default function TransfersScreen() {
 
     setSaving(true);
     try {
+      // 1. Calculate total value by deducting from source branch FIRST
+      // This is atomic and ensures we have the value before creating the transfer record
+      let totalValue = 0;
+      const results = [];
+      for (const item of cart) {
+        const { data: avcoValue, error: decrError } = await supabase.rpc('decrement_inventory', {
+          p_branch_id: currentBranch.id,
+          p_product_id: item.product_id,
+          p_quantity: item.quantity,
+        });
+        if (decrError) throw decrError;
+        
+        const unitCost = Number(avcoValue) || 0;
+        totalValue += unitCost * item.quantity;
+        results.push({ ...item, unitCost });
+      }
+
+      // 2. Insert the transfer record with the value already in notes
+      const valueTag = `[VALUE:${totalValue.toFixed(2)}]`;
+      const finalNotes = (notes.trim() ? notes.trim() + ' ' : '') + valueTag;
+
       const { data: transfer, error } = await supabase
         .from('stock_transfers')
         .insert({
@@ -151,33 +172,25 @@ export default function TransfersScreen() {
           to_branch_id: toBranchId,
           requested_by: profile.id,
           status: 'in_transit',
-          notes: notes.trim() || null,
+          notes: finalNotes,
         })
         .select()
         .single();
 
-      if (error) { Alert.alert('Error', error.message); setSaving(false); return; }
+      if (error) throw error;
 
-      // Insert all cart items
-      const transferItems = cart.map(c => ({
+      // 3. Insert items with their snapshotted unit_cost
+      const transferItems = results.map(r => ({
         transfer_id: transfer.id,
-        product_id: c.product_id,
-        quantity: c.quantity,
+        product_id: r.product_id,
+        quantity: r.quantity,
+        unit_cost: r.unitCost, // Requires the column from accounting_fixes.sql
       }));
-      await supabase.from('stock_transfer_items').insert(transferItems);
+      
+      const { error: itemsError } = await supabase.from('stock_transfer_items').insert(transferItems);
+      if (itemsError) throw itemsError;
 
-      // Deduct from source branch and calculate total transfer value
-      let totalValue = 0;
-      for (const item of cart) {
-        const { data: avcoValue } = await supabase.rpc('decrement_inventory', {
-          p_branch_id: currentBranch.id,
-          p_product_id: item.product_id,
-          p_quantity: item.quantity,
-        });
-        totalValue += (Number(avcoValue) || 0) * item.quantity;
-      }
-
-      // Post accounting entry (Transfer Out)
+      // 4. Post accounting entry
       const destBranchName = otherBranches.find(b => b.id === toBranchId)?.name || '?';
       await postStockTransferEntry({
         businessId: business.id,
@@ -189,21 +202,14 @@ export default function TransfersScreen() {
         userId: profile.id,
       });
 
-      // Update transfer notes to include the value for the destination branch
-      await supabase
-        .from('stock_transfers')
-        .update({ 
-          notes: (notes.trim() ? notes.trim() + ' ' : '') + `[VALUE:${totalValue.toFixed(2)}]`
-        })
-        .eq('id', transfer.id);
-
       const itemsSummary = cart.map(c => `${c.quantity}× ${c.product_name}`).join('\n');
-      Alert.alert('Transfer Sent', `Stock is now "In Transit". Destination branch must confirm receipt.\n\n${itemsSummary}`);
+      Alert.alert('Transfer Sent', `Stock is now "In Transit".\n\n${itemsSummary}`);
       setShowForm(false);
       setToBranchId(''); setCart([]); setNotes(''); setProductSearch('');
       load();
     } catch (err: any) {
-      Alert.alert('Error', err?.message || 'Something went wrong');
+      console.error('Transfer creation error:', err);
+      Alert.alert('Error', err?.message || 'Failed to create transfer');
     } finally {
       setSaving(false);
     }
@@ -221,42 +227,72 @@ export default function TransfersScreen() {
         {
           text: 'Confirm Receipt',
           onPress: async () => {
-            const { data: items } = await supabase
-              .from('stock_transfer_items')
-              .select('*')
-              .eq('transfer_id', transferId);
+            setSaving(true);
+            try {
+              // 1. Get items to receive
+              const { data: items, error: itemsError } = await supabase
+                .from('stock_transfer_items')
+                .select('*, products(name)')
+                .eq('transfer_id', transferId);
 
-            // Extract value from notes if present
-            const valueMatch = transfer.notes?.match(/\[VALUE:([\d.]+)\]/);
-            const totalValue = valueMatch ? parseFloat(valueMatch[1]) : 0;
+              if (itemsError) {
+                if (itemsError.message?.includes('column "unit_cost" does not exist')) {
+                  throw new Error('Database column "unit_cost" missing. Please run accounting_fixes.sql in your Supabase SQL editor.');
+                }
+                throw itemsError;
+              }
+              if (!items || items.length === 0) throw new Error('No items found in this transfer record. It may have been created incorrectly.');
 
-            for (const item of (items || [])) {
-              await supabase.rpc('increment_inventory', {
-                p_branch_id: currentBranch.id,
-                p_product_id: item.product_id,
-                p_quantity: item.quantity,
-              });
+              // Debug: Show processing count
+              console.log(`Processing receipt for ${items.length} items...`);
+
+              // 2. Increment inventory for each item
+              for (const item of items) {
+                // Use stored unit_cost if available, else try to infer from notes value (fallback)
+                const unitCost = item.unit_cost || 0;
+                
+                const { error: rpcError } = await supabase.rpc('increment_inventory', {
+                  p_branch_id: currentBranch.id,
+                  p_product_id: item.product_id,
+                  p_quantity: item.quantity,
+                  p_unit_cost: unitCost > 0 ? unitCost : null,
+                });
+                if (rpcError) throw rpcError;
+              }
+
+              // 3. Extract value from notes for accounting
+              const valueMatch = transfer.notes?.match(/\[VALUE:([\d.]+)\]/);
+              const totalValue = valueMatch ? parseFloat(valueMatch[1]) : 0;
+
+              // 4. Post accounting entry
+              if (totalValue > 0) {
+                await postStockTransferEntry({
+                  businessId: business.id,
+                  branchId: currentBranch.id,
+                  transferId: transferId,
+                  value: totalValue,
+                  type: 'receive',
+                  otherBranchName: transfer.from_branch,
+                  userId: profile?.id,
+                });
+              }
+
+              // 5. Mark as received
+              const { error: updateError } = await supabase
+                .from('stock_transfers')
+                .update({ status: 'received', approved_by: profile?.id })
+                .eq('id', transferId);
+              
+              if (updateError) throw updateError;
+
+              Alert.alert('Success ✅', 'Stock has been added to your inventory.');
+              load();
+            } catch (err: any) {
+              console.error('Receipt error:', err);
+              Alert.alert('Receipt Failed', err?.message || 'Could not process receipt');
+            } finally {
+              setSaving(false);
             }
-
-            // Post accounting entry (Transfer In)
-            if (totalValue > 0) {
-              await postStockTransferEntry({
-                businessId: business.id,
-                branchId: currentBranch.id,
-                transferId: transferId,
-                value: totalValue,
-                type: 'receive',
-                otherBranchName: transfer.from_branch,
-                userId: profile?.id,
-              });
-            }
-
-            await supabase
-              .from('stock_transfers')
-              .update({ status: 'received', approved_by: profile?.id })
-              .eq('id', transferId);
-
-            load();
           }
         }
       ]
