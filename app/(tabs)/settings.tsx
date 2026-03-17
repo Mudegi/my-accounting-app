@@ -116,6 +116,8 @@ export default function SettingsScreen() {
   };
 
   const isAdmin = profile?.role === 'admin';
+  const isManager = profile?.role === 'branch_manager';
+  const isAdminOrManager = isAdmin || isManager;
 
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
@@ -142,7 +144,8 @@ export default function SettingsScreen() {
         )}
       </View>
 
-      {/* Subscription & Currency */}
+      {/* Subscription & Currency — admin only */}
+      {isAdmin && (
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Subscription & Billing</Text>
         <TouchableOpacity style={styles.subscriptionCard} onPress={() => router.push('/subscription' as any)}>
@@ -170,6 +173,7 @@ export default function SettingsScreen() {
           <Text style={{ color: '#ccc', fontSize: 14 }}>Currency: <Text style={{ color: '#fff', fontWeight: '600' }}>{currency.symbol} ({currency.code})</Text></Text>
         </View>
       </View>
+      )}
 
       {/* Platform Admin — super admins only */}
       {isSuperAdmin && (
@@ -190,41 +194,57 @@ export default function SettingsScreen() {
         </View>
       )}
 
-      {/* Current Branch Selector */}
+      {/* Current Branch — admins & managers can switch, salespersons see assigned branch only */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Current Branch</Text>
-        {branches.map((branch) => (
-          <TouchableOpacity
-            key={branch.id}
-            style={[
-              styles.branchRow,
-              currentBranch?.id === branch.id && styles.branchRowActive,
-            ]}
-            onPress={() => setCurrentBranch(branch)}
-          >
-            <FontAwesome
-              name={currentBranch?.id === branch.id ? 'dot-circle-o' : 'circle-o'}
-              size={18}
-              color={currentBranch?.id === branch.id ? '#e94560' : '#666'}
-            />
+        {isAdminOrManager ? (
+          <>
+            {branches.map((branch) => (
+              <TouchableOpacity
+                key={branch.id}
+                style={[
+                  styles.branchRow,
+                  currentBranch?.id === branch.id && styles.branchRowActive,
+                ]}
+                onPress={() => setCurrentBranch(branch)}
+              >
+                <FontAwesome
+                  name={currentBranch?.id === branch.id ? 'dot-circle-o' : 'circle-o'}
+                  size={18}
+                  color={currentBranch?.id === branch.id ? '#e94560' : '#666'}
+                />
+                <View style={styles.branchInfo}>
+                  <Text style={[styles.branchName, currentBranch?.id === branch.id && styles.branchNameActive]}>
+                    {branch.name}
+                  </Text>
+                  {branch.location ? (
+                    <Text style={styles.branchLocation}>{branch.location}</Text>
+                  ) : null}
+                </View>
+              </TouchableOpacity>
+            ))}
+            {isAdmin && (
+              <TouchableOpacity
+                style={styles.addRowButton}
+                onPress={() => router.push('/admin/branches')}
+              >
+                <FontAwesome name="plus" size={14} color="#e94560" />
+                <Text style={styles.addRowText}>Manage Branches</Text>
+              </TouchableOpacity>
+            )}
+          </>
+        ) : (
+          <View style={[styles.branchRow, styles.branchRowActive]}>
+            <FontAwesome name="dot-circle-o" size={18} color="#e94560" />
             <View style={styles.branchInfo}>
-              <Text style={[styles.branchName, currentBranch?.id === branch.id && styles.branchNameActive]}>
-                {branch.name}
+              <Text style={[styles.branchName, styles.branchNameActive]}>
+                {currentBranch?.name || 'No branch assigned'}
               </Text>
-              {branch.location ? (
-                <Text style={styles.branchLocation}>{branch.location}</Text>
+              {currentBranch?.location ? (
+                <Text style={styles.branchLocation}>{currentBranch.location}</Text>
               ) : null}
             </View>
-          </TouchableOpacity>
-        ))}
-        {isAdmin && (
-          <TouchableOpacity
-            style={styles.addRowButton}
-            onPress={() => router.push('/admin/branches')}
-          >
-            <FontAwesome name="plus" size={14} color="#e94560" />
-            <Text style={styles.addRowText}>Manage Branches</Text>
-          </TouchableOpacity>
+          </View>
         )}
       </View>
 
