@@ -23,6 +23,8 @@ type Transfer = {
   status: string;
   created_at: string;
   notes: string | null;
+  from_branch_id: string;
+  to_branch_id: string;
   from_branch: string;
   to_branch: string;
   items_count: number;
@@ -51,7 +53,7 @@ export default function TransfersScreen() {
     const { data } = await supabase
       .from('stock_transfers')
       .select(`
-        id, status, created_at, notes,
+        id, status, created_at, notes, from_branch_id, to_branch_id,
         from_branch:branches!from_branch_id(name),
         to_branch:branches!to_branch_id(name),
         stock_transfer_items(id)
@@ -67,6 +69,8 @@ export default function TransfersScreen() {
         status: t.status,
         created_at: t.created_at,
         notes: t.notes,
+        from_branch_id: t.from_branch_id,
+        to_branch_id: t.to_branch_id,
         from_branch: t.from_branch?.name || '?',
         to_branch: t.to_branch?.name || '?',
         items_count: t.stock_transfer_items?.length || 0,
@@ -219,6 +223,11 @@ export default function TransfersScreen() {
     const transfer = transfers.find((t) => t.id === transferId);
     if (!transfer || !currentBranch || !business) return;
 
+    if (transfer.to_branch_id !== currentBranch.id) {
+      Alert.alert('Wrong Branch', 'Switch to the destination branch to confirm receipt for this transfer.');
+      return;
+    }
+
     Alert.alert(
       'Confirm Receipt',
       'Confirm you have received this stock? It will be added to your inventory.',
@@ -252,7 +261,7 @@ export default function TransfersScreen() {
                 const unitCost = item.unit_cost || 0;
                 
                 const { error: rpcError } = await supabase.rpc('increment_inventory', {
-                  p_branch_id: currentBranch.id,
+                  p_branch_id: transfer.to_branch_id,
                   p_product_id: item.product_id,
                   p_quantity: item.quantity,
                   p_unit_cost: unitCost > 0 ? unitCost : null,
@@ -339,7 +348,7 @@ export default function TransfersScreen() {
             <Text style={styles.cardMeta}>{item.items_count} product{item.items_count !== 1 ? 's' : ''}</Text>
             {item.notes && <Text style={styles.cardNote}>{item.notes}</Text>}
             <Text style={styles.cardDate}>{new Date(item.created_at).toLocaleDateString()}</Text>
-            {item.status === 'in_transit' && item.to_branch === currentBranch?.name && (
+            {item.status === 'in_transit' && item.to_branch_id === currentBranch?.id && (
               <TouchableOpacity style={styles.receiveBtn} onPress={() => handleReceive(item.id)}>
                 <Text style={styles.receiveBtnText}>✅ Confirm Receipt</Text>
               </TouchableOpacity>
