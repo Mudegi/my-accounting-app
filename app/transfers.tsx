@@ -48,6 +48,37 @@ export default function TransfersScreen() {
 
   const otherBranches = branches.filter((b) => b.id !== currentBranch?.id);
 
+  const logTransferAudit = useCallback(async ({
+    action,
+    transferId,
+    branchId,
+    oldData,
+    newData,
+  }: {
+    action: string;
+    transferId?: string | null;
+    branchId?: string | null;
+    oldData?: any;
+    newData?: any;
+  }) => {
+    if (!business || !profile) return;
+
+    const { error } = await supabase.from('audit_log').insert({
+      business_id: business.id,
+      branch_id: branchId ?? currentBranch?.id ?? null,
+      user_id: profile.id,
+      action,
+      table_name: 'stock_transfers',
+      record_id: transferId ?? null,
+      old_data: oldData ?? null,
+      new_data: newData ?? null,
+    });
+
+    if (error) {
+      console.warn('Transfer audit log failed:', error.message);
+    }
+  }, [business, currentBranch, profile]);
+
   const load = useCallback(async () => {
     if (!business || !currentBranch) return;
     const { data } = await supabase
@@ -206,6 +237,24 @@ export default function TransfersScreen() {
         userId: profile.id,
       });
 
+      await logTransferAudit({
+        action: 'stock_transfer_sent',
+        transferId: transfer.id,
+        branchId: currentBranch.id,
+        newData: {
+          from_branch_id: currentBranch.id,
+          to_branch_id: toBranchId,
+          total_value: totalValue,
+          item_count: results.length,
+          items: results.map((item) => ({
+            product_id: item.product_id,
+            product_name: item.product_name,
+            quantity: item.quantity,
+            unit_cost: item.unitCost,
+          })),
+        },
+      });
+
       const itemsSummary = cart.map(c => `${c.quantity}× ${c.product_name}`).join('\n');
       Alert.alert('Transfer Sent', `Stock is now "In Transit".\n\n${itemsSummary}`);
       setShowForm(false);
@@ -224,6 +273,17 @@ export default function TransfersScreen() {
     if (!transfer || !currentBranch || !business) return;
 
     if (transfer.to_branch_id !== currentBranch.id) {
+      void logTransferAudit({
+        action: 'stock_transfer_receipt_wrong_branch_attempt',
+        transferId,
+        branchId: currentBranch.id,
+        newData: {
+          expected_branch_id: transfer.to_branch_id,
+          actual_branch_id: currentBranch.id,
+          from_branch_id: transfer.from_branch_id,
+          to_branch_id: transfer.to_branch_id,
+        },
+      });
       Alert.alert('Wrong Branch', 'Switch to the destination branch to confirm receipt for this transfer.');
       return;
     }
@@ -237,6 +297,8 @@ export default function TransfersScreen() {
           text: 'Confirm Receipt',
           onPress: async () => {
             setSaving(true);
+            let receiptItems: any[] = [];
+            let totalValue = 0;
             try {
               // 1. Get items to receive
               const { data: items, error: itemsError } = await supabase
@@ -251,6 +313,7 @@ export default function TransfersScreen() {
                 throw itemsError;
               }
               if (!items || items.length === 0) throw new Error('No items found in this transfer record. It may have been created incorrectly.');
+              receiptItems = items;
 
               // Debug: Show processing count
               console.log(`Processing receipt for ${items.length} items...`);
@@ -271,7 +334,7 @@ export default function TransfersScreen() {
 
               // 3. Extract value from notes for accounting
               const valueMatch = transfer.notes?.match(/\[VALUE:([\d.]+)\]/);
-              const totalValue = valueMatch ? parseFloat(valueMatch[1]) : 0;
+              totalValue = valueMatch ? parseFloat(valueMatch[1]) : 0;
 
               // 4. Post accounting entry
               if (totalValue > 0) {
@@ -294,10 +357,52 @@ export default function TransfersScreen() {
               
               if (updateError) throw updateError;
 
+              await logTransferAudit({
+                action: 'stock_transfer_received',
+                transferId,
+                branchId: transfer.to_branch_id,
+                oldData: {
+                  status: 'in_transit',
+                },
+                newData: {
+                  status: 'received',
+                  from_branch_id: transfer.from_branch_id,
+                  to_branch_id: transfer.to_branch_id,
+                  receiver_branch_id: currentBranch.id,
+                  total_value: totalValue,
+                  item_count: receiptItems.length,
+                  items: receiptItems.map((item) => ({
+                    product_id: item.product_id,
+                    product_name: item.products?.name || null,
+                    quantity: item.quantity,
+                    unit_cost: item.unit_cost || 0,
+                  })),
+                },
+              });
+
               Alert.alert('Success ✅', 'Stock has been added to your inventory.');
               load();
             } catch (err: any) {
               console.error('Receipt error:', err);
+              await logTransferAudit({
+                action: 'stock_transfer_receipt_failed',
+                transferId,
+                branchId: currentBranch.id,
+                newData: {
+                  from_branch_id: transfer.from_branch_id,
+                  to_branch_id: transfer.to_branch_id,
+                  receiver_branch_id: currentBranch.id,
+                  total_value: totalValue,
+                  item_count: receiptItems.length,
+                  items: receiptItems.map((item) => ({
+                    product_id: item.product_id,
+                    product_name: item.products?.name || null,
+                    quantity: item.quantity,
+                    unit_cost: item.unit_cost || 0,
+                  })),
+                  error: err?.message || 'Unknown receipt error',
+                },
+              });
               Alert.alert('Receipt Failed', err?.message || 'Could not process receipt');
             } finally {
               setSaving(false);
