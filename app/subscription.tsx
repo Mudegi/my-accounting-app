@@ -76,10 +76,27 @@ export default function SubscriptionScreen() {
     setTab('payment');
   };
 
+  // Auto-select current plan when user taps Pay tab without selecting from Plans first
+  const handleTabPress = (t: Tab) => {
+    if (t === 'payment' && !selectedPlan && currentSub?.plan_id) {
+      const plan = plans.find((p) => p.id === currentSub.plan_id);
+      if (plan && plan.name !== 'free_trial') {
+        setSelectedPlan(currentSub.plan_id);
+      }
+    }
+    setTab(t);
+  };
+
   const handlePayment = () => {
-    if (!selectedPlan) return;
+    if (!selectedPlan) {
+      Alert.alert('No Plan Selected', 'Please select a plan from the Plans tab first.');
+      return;
+    }
     const plan = plans.find((p) => p.id === selectedPlan);
-    if (!plan) return;
+    if (!plan) {
+      Alert.alert('Plan Not Found', 'Could not find the selected plan. Please go back to Plans and select again.');
+      return;
+    }
     const amount = billingCycle === 'yearly' ? plan.price_yearly : plan.price_monthly;
 
     Alert.alert(
@@ -129,7 +146,7 @@ export default function SubscriptionScreen() {
           <TouchableOpacity
             key={t}
             style={[styles.tab, tab === t && styles.tabActive]}
-            onPress={() => setTab(t)}
+            onPress={() => handleTabPress(t)}
           >
             <Text style={[styles.tabText, tab === t && styles.tabTextActive]}>
               {t === 'plans' ? 'Plans' : t === 'payment' ? 'Pay' : 'History'}

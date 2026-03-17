@@ -24,7 +24,7 @@ type Branch = {
 };
 
 export default function BranchesScreen() {
-  const { business, profile } = useAuth();
+  const { business, profile, subscriptionStatus } = useAuth();
 
   // Admin-only route guard
   if (profile && profile.role !== 'admin') {
@@ -37,6 +37,9 @@ export default function BranchesScreen() {
   const [location, setLocation] = useState('');
   const [phone, setPhone] = useState('');
   const [saving, setSaving] = useState(false);
+
+  const maxBranches = subscriptionStatus?.max_branches ?? -1; // -1 = unlimited
+  const branchLimitReached = maxBranches > 0 && branches.length >= maxBranches;
 
   const load = useCallback(async () => {
     if (!business) return;
@@ -53,6 +56,16 @@ export default function BranchesScreen() {
   const handleAdd = async () => {
     if (!name.trim()) { Alert.alert('Error', 'Branch name is required'); return; }
     if (!business) return;
+
+    // Enforce plan branch limit
+    if (branchLimitReached) {
+      Alert.alert(
+        'Branch Limit Reached',
+        `Your ${subscriptionStatus?.display_name || 'current'} plan allows up to ${maxBranches} branch${maxBranches === 1 ? '' : 'es'}. Upgrade your plan to add more branches.`
+      );
+      return;
+    }
+
     setSaving(true);
     const { error } = await supabase.from('branches').insert({
       business_id: business.id,
@@ -103,6 +116,13 @@ export default function BranchesScreen() {
                 </TouchableOpacity>
               </View>
             </View>
+          ) : branchLimitReached ? (
+            <View style={styles.limitBanner}>
+              <FontAwesome name="lock" size={16} color="#FF9800" />
+              <Text style={styles.limitText}>
+                Branch limit reached ({branches.length}/{maxBranches}). Upgrade your plan to add more.
+              </Text>
+            </View>
           ) : (
             <TouchableOpacity style={styles.addButton} onPress={() => setShowForm(true)}>
               <FontAwesome name="plus" size={16} color="#fff" />
@@ -142,6 +162,8 @@ const styles = StyleSheet.create({
   saveText: { color: '#fff', fontWeight: 'bold' },
   addButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#e94560', borderRadius: 12, padding: 14, marginBottom: 16, gap: 8 },
   addButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 15 },
+  limitBanner: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FF980022', borderRadius: 12, padding: 14, marginBottom: 16, gap: 10, borderWidth: 1, borderColor: '#FF9800' },
+  limitText: { color: '#FF9800', fontSize: 13, fontWeight: '600', flex: 1 },
   empty: { alignItems: 'center', paddingTop: 60 },
   emptyText: { color: '#555', fontSize: 16, marginTop: 12 },
 });
