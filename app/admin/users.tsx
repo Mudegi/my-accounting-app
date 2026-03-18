@@ -21,6 +21,7 @@ type User = {
   id: string;
   full_name: string;
   role: string;
+  sales_type: 'in_store' | 'field' | 'both';
   branch_name: string | null;
   branch_id: string | null;
   is_active: boolean;
@@ -47,6 +48,7 @@ export default function UsersScreen() {
   const [fullName, setFullName] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<string>('salesperson');
+  const [salesType, setSalesType] = useState<'in_store' | 'field' | 'both'>('in_store');
   const [branchId, setBranchId] = useState('');
   const [saving, setSaving] = useState(false);
   const [userLimit, setUserLimit] = useState<{ max: number; current: number } | null>(null);
@@ -63,7 +65,7 @@ export default function UsersScreen() {
 
     const { data } = await supabase
       .from('profiles')
-      .select(`id, full_name, role, branch_id, is_active, suspended_at, deleted_at, suspension_reason, branches(name)`)
+      .select(`id, full_name, role, sales_type, branch_id, is_active, suspended_at, deleted_at, suspension_reason, branches(name)`)
       .eq('business_id', business.id)
       .is('deleted_at', null)
       .order('full_name');
@@ -73,6 +75,7 @@ export default function UsersScreen() {
         id: u.id,
         full_name: u.full_name,
         role: u.role,
+        sales_type: u.sales_type || 'in_store',
         branch_id: u.branch_id,
         branch_name: u.branches?.name || null,
         is_active: u.is_active,
@@ -137,6 +140,7 @@ export default function UsersScreen() {
         branch_id: branchId,
         full_name: fullName.trim(),
         role,
+        sales_type: role === 'salesperson' ? salesType : 'both',
       });
 
       if (profileError) {
@@ -145,7 +149,7 @@ export default function UsersScreen() {
         Alert.alert(
           'User Created ✅',
           `Share these login credentials with ${fullName.trim()}:\n\n📧 Email: ${email.trim()}\n🔑 Password: ${password.trim()}\n\nThey can now open YourBooks and sign in immediately.`,
-          [{ text: 'OK', onPress: () => { setShowInvite(false); setEmail(''); setFullName(''); setPassword(''); setRole('salesperson'); setBranchId(''); load(); } }]
+          [{ text: 'OK', onPress: () => { setShowInvite(false); setEmail(''); setFullName(''); setPassword(''); setRole('salesperson'); setSalesType('in_store'); setBranchId(''); load(); } }]
         );
       }
     } catch (err: any) {
@@ -161,7 +165,22 @@ export default function UsersScreen() {
       {
         text: 'Confirm',
         onPress: async () => {
-          await supabase.from('profiles').update({ role: newRole }).eq('id', userId);
+          const salesType = newRole === 'salesperson' ? 'in_store' : 'both';
+          await supabase.from('profiles').update({ role: newRole, sales_type: salesType }).eq('id', userId);
+          load();
+        }
+      }
+    ]);
+  };
+
+  const handleSalesTypeChange = (userId: string, newType: 'in_store' | 'field' | 'both', userName: string) => {
+    const label = newType === 'in_store' ? 'In-Store' : newType === 'field' ? 'Field Sales' : 'Both';
+    Alert.alert('Change Sales Type', `Set ${userName} to ${label}?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Confirm',
+        onPress: async () => {
+          await supabase.from('profiles').update({ sales_type: newType }).eq('id', userId);
           load();
         }
       }
@@ -294,6 +313,19 @@ export default function UsersScreen() {
             ))}
           </View>
 
+          {role === 'salesperson' && (
+            <>
+              <Text style={[styles.label, { marginTop: 12 }]}>Sales Type</Text>
+              <View style={styles.chipRow}>
+                {([['in_store', 'In-Store'], ['field', 'Field Sales'], ['both', 'Both']] as const).map(([val, label]) => (
+                  <TouchableOpacity key={val} style={[styles.chip, salesType === val && styles.chipActive]} onPress={() => setSalesType(val)}>
+                    <Text style={[styles.chipText, salesType === val && styles.chipTextActive]}>{label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </>
+          )}
+
           <Text style={[styles.label, { marginTop: 12 }]}>Assign to Branch</Text>
           <View style={styles.chipRow}>
             {branches.map((b) => (
@@ -332,6 +364,13 @@ export default function UsersScreen() {
                     <View style={[styles.roleBadge, { backgroundColor: roleColor(item.role) + '22', borderColor: roleColor(item.role) }]}>
                       <Text style={[styles.roleText, { color: roleColor(item.role) }]}>{item.role.replace('_', ' ')}</Text>
                     </View>
+                    {item.role === 'salesperson' && (
+                      <View style={[styles.roleBadge, { backgroundColor: item.sales_type === 'field' ? '#FF980022' : item.sales_type === 'both' ? '#2196F322' : '#4CAF5022', borderColor: item.sales_type === 'field' ? '#FF9800' : item.sales_type === 'both' ? '#2196F3' : '#4CAF50' }]}>
+                        <Text style={[styles.roleText, { color: item.sales_type === 'field' ? '#FF9800' : item.sales_type === 'both' ? '#2196F3' : '#4CAF50' }]}>
+                          {item.sales_type === 'field' ? 'field sales' : item.sales_type === 'both' ? 'in-store + field' : 'in-store'}
+                        </Text>
+                      </View>
+                    )}
                     {!item.is_active && (
                       <View style={[styles.roleBadge, { backgroundColor: '#e9456022', borderColor: '#e94560' }]}>
                         <Text style={[styles.roleText, { color: '#e94560' }]}>SUSPENDED</Text>
@@ -369,6 +408,19 @@ export default function UsersScreen() {
                         {ROLES.filter((r) => r !== item.role).map((r) => (
                           <TouchableOpacity key={r} style={[styles.actionChip, { borderColor: roleColor(r) }]} onPress={() => handleRoleChange(item.id, r, item.full_name)}>
                             <Text style={[styles.actionChipText, { color: roleColor(r) }]}>{r.replace('_', ' ')}</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </ScrollView>
+                    </View>
+                  )}
+
+                  {item.role === 'salesperson' && item.id !== profile?.id && (
+                    <View style={styles.actionsRow}>
+                      <Text style={styles.actionLabel}>Type:</Text>
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.branchScroll}>
+                        {(['in_store', 'field', 'both'] as const).filter((t) => t !== item.sales_type).map((t) => (
+                          <TouchableOpacity key={t} style={styles.actionChip} onPress={() => handleSalesTypeChange(item.id, t, item.full_name)}>
+                            <Text style={styles.actionChipText}>{t === 'in_store' ? 'In-Store' : t === 'field' ? 'Field Sales' : 'Both'}</Text>
                           </TouchableOpacity>
                         ))}
                       </ScrollView>

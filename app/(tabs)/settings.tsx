@@ -118,6 +118,8 @@ export default function SettingsScreen() {
   const isAdmin = profile?.role === 'admin';
   const isManager = profile?.role === 'branch_manager';
   const isAdminOrManager = isAdmin || isManager;
+  const canDoFieldSales = isAdminOrManager || profile?.sales_type === 'field' || profile?.sales_type === 'both';
+  const isFieldOnly = profile?.role === 'salesperson' && profile?.sales_type === 'field';
 
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
@@ -315,6 +317,7 @@ export default function SettingsScreen() {
       )}
 
       {/* Field Sales */}
+      {canDoFieldSales && (
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Field Sales</Text>
         {isAdmin && (
@@ -352,30 +355,37 @@ export default function SettingsScreen() {
           <FontAwesome name="chevron-right" size={14} color="#555" />
         </TouchableOpacity>
       </View>
+      )}
 
       {/* More Options */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>More</Text>
-        <TouchableOpacity style={styles.menuRow} onPress={() => router.push('/suppliers' as any)}>
-          <FontAwesome name="truck" size={18} color="#aaa" />
-          <Text style={styles.menuLabel}>Suppliers</Text>
-          <FontAwesome name="chevron-right" size={14} color="#555" />
-        </TouchableOpacity>
+        {!isFieldOnly && (
+          <TouchableOpacity style={styles.menuRow} onPress={() => router.push('/suppliers' as any)}>
+            <FontAwesome name="truck" size={18} color="#aaa" />
+            <Text style={styles.menuLabel}>Suppliers</Text>
+            <FontAwesome name="chevron-right" size={14} color="#555" />
+          </TouchableOpacity>
+        )}
         <TouchableOpacity style={styles.menuRow} onPress={() => router.push('/customers' as any)}>
           <FontAwesome name="users" size={18} color="#aaa" />
           <Text style={styles.menuLabel}>Customers</Text>
           <FontAwesome name="chevron-right" size={14} color="#555" />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.menuRow} onPress={() => router.push('/sales' as any)}>
-          <FontAwesome name="history" size={18} color="#aaa" />
-          <Text style={styles.menuLabel}>Sales History</Text>
-          <FontAwesome name="chevron-right" size={14} color="#555" />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.menuRow} onPress={() => router.push('/purchase-history' as any)}>
-          <FontAwesome name="archive" size={18} color="#aaa" />
-          <Text style={styles.menuLabel}>Purchase History</Text>
-          <FontAwesome name="chevron-right" size={14} color="#555" />
-        </TouchableOpacity>
+        {!isFieldOnly && (
+          <TouchableOpacity style={styles.menuRow} onPress={() => router.push('/sales' as any)}>
+            <FontAwesome name="history" size={18} color="#aaa" />
+            <Text style={styles.menuLabel}>Sales History</Text>
+            <FontAwesome name="chevron-right" size={14} color="#555" />
+          </TouchableOpacity>
+        )}
+        {!isFieldOnly && (
+          <TouchableOpacity style={styles.menuRow} onPress={() => router.push('/purchase-history' as any)}>
+            <FontAwesome name="archive" size={18} color="#aaa" />
+            <Text style={styles.menuLabel}>Purchase History</Text>
+            <FontAwesome name="chevron-right" size={14} color="#555" />
+          </TouchableOpacity>
+        )}
         {isAdmin && (
           <TouchableOpacity style={styles.menuRow} onPress={() => router.push('/reports')}>
             <FontAwesome name="line-chart" size={18} color="#aaa" />
@@ -383,16 +393,20 @@ export default function SettingsScreen() {
             <FontAwesome name="chevron-right" size={14} color="#555" />
           </TouchableOpacity>
         )}
-        <TouchableOpacity style={styles.menuRow} onPress={() => router.push('/transfers')}>
-          <FontAwesome name="exchange" size={18} color="#aaa" />
-          <Text style={styles.menuLabel}>Stock Transfers</Text>
-          <FontAwesome name="chevron-right" size={14} color="#555" />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.menuRow} onPress={() => router.push('/credit-note' as any)}>
-          <FontAwesome name="undo" size={18} color="#aaa" />
-          <Text style={styles.menuLabel}>Credit Notes / Returns</Text>
-          <FontAwesome name="chevron-right" size={14} color="#555" />
-        </TouchableOpacity>
+        {!isFieldOnly && (
+          <TouchableOpacity style={styles.menuRow} onPress={() => router.push('/transfers')}>
+            <FontAwesome name="exchange" size={18} color="#aaa" />
+            <Text style={styles.menuLabel}>Stock Transfers</Text>
+            <FontAwesome name="chevron-right" size={14} color="#555" />
+          </TouchableOpacity>
+        )}
+        {!isFieldOnly && (
+          <TouchableOpacity style={styles.menuRow} onPress={() => router.push('/credit-note' as any)}>
+            <FontAwesome name="undo" size={18} color="#aaa" />
+            <Text style={styles.menuLabel}>Credit Notes / Returns</Text>
+            <FontAwesome name="chevron-right" size={14} color="#555" />
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Help & Guide */}

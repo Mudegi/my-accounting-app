@@ -34,6 +34,10 @@ export default function MyStockScreen() {
       userId: profile.id,
       status: statusFilter !== 'all' ? statusFilter : undefined,
     });
+    if (result.error) {
+      console.error('Field stock load error:', result.error);
+      Alert.alert('Load Error', `Could not load assignments: ${result.error}`);
+    }
     setAssignments(result.data);
     setLoading(false);
   }, [business, profile, statusFilter]);

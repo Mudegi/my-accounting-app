@@ -66,6 +66,11 @@ export default function FieldSellScreen() {
       userId: profile.id,
       status: 'partially_returned',
     });
+    if (result.error || result2.error) {
+      const msg = result.error || result2.error;
+      console.error('Field stock load error:', msg);
+      Alert.alert('Load Error', `Could not load stock assignments: ${msg}`);
+    }
     setAssignments([...result.data, ...result2.data]);
     setLoading(false);
   }, [business, profile]);

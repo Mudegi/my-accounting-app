@@ -541,7 +541,7 @@ export default function TransfersScreen() {
               </View>
 
               {/* Filtered product results */}
-              <View style={styles.productList}>
+              <ScrollView style={styles.productList} nestedScrollEnabled showsVerticalScrollIndicator={false}>
                 {filteredProducts.slice(0, 8).map(p => (
                   <TouchableOpacity
                     key={p.id}
@@ -561,7 +561,7 @@ export default function TransfersScreen() {
                 {filteredProducts.length > 8 && (
                   <Text style={{ color: '#666', fontSize: 12, paddingVertical: 4 }}>Type to search... {products.length} products total</Text>
                 )}
-              </View>
+              </ScrollView>
 
               <Text style={[styles.label, { marginTop: 14 }]}>Notes (optional)</Text>
               <TextInput style={styles.input} placeholder="e.g. Restocking for weekend" placeholderTextColor="#555" value={notes} onChangeText={setNotes} />
@@ -630,7 +630,7 @@ const styles = StyleSheet.create({
   // Search
   searchBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#16213e', borderRadius: 10, paddingHorizontal: 12, borderWidth: 1, borderColor: '#0f3460', gap: 8 },
   searchInput: { flex: 1, color: '#fff', fontSize: 15, paddingVertical: 12 },
-  productList: { marginTop: 6, maxHeight: 220, backgroundColor: 'transparent' },
+  productList: { marginTop: 6, maxHeight: 220, backgroundColor: 'transparent', overflow: 'hidden' },
   productItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#16213e', borderRadius: 10, padding: 12, marginBottom: 6, borderWidth: 1, borderColor: '#0f3460' },
   productItemName: { color: '#fff', fontSize: 14, fontWeight: '600', flex: 1 },
   productQtyBadge: { backgroundColor: '#0f3460', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },

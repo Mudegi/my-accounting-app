@@ -16,6 +16,7 @@ type Profile = {
   branch_id: string | null;
   full_name: string;
   role: 'admin' | 'branch_manager' | 'salesperson';
+  sales_type: 'in_store' | 'field' | 'both';
   phone: string | null;
   is_active: boolean;
   is_super_admin?: boolean;

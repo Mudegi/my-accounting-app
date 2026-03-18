@@ -2,6 +2,7 @@ import React from 'react';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { Tabs } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAuth } from '@/lib/auth';
 
 function TabBarIcon(props: {
   name: React.ComponentProps<typeof FontAwesome>['name'];
@@ -12,6 +13,10 @@ function TabBarIcon(props: {
 
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
+  const { profile } = useAuth();
+
+  // Field-only salespersons can't do normal POS sales or manage inventory
+  const isFieldOnly = profile?.role === 'salesperson' && profile?.sales_type === 'field';
 
   return (
     <Tabs
@@ -33,6 +38,7 @@ export default function TabLayout() {
         options={{
           title: 'Sell',
           tabBarIcon: ({ color }) => <TabBarIcon name="shopping-cart" color={color} />,
+          href: isFieldOnly ? null : '/(tabs)',
         }}
       />
       <Tabs.Screen
@@ -40,6 +46,7 @@ export default function TabLayout() {
         options={{
           title: 'Inventory',
           tabBarIcon: ({ color }) => <TabBarIcon name="cube" color={color} />,
+          href: isFieldOnly ? null : '/(tabs)/inventory',
         }}
       />
       <Tabs.Screen
