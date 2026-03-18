@@ -17,6 +17,7 @@ import { useAuth } from '@/lib/auth';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { exportData, importData } from '@/lib/import-export';
+import { fetchEfrisGoods, type EfrisConfig } from '@/lib/efris';
 
 type InventoryItem = {
   id: string;
@@ -28,6 +29,7 @@ type InventoryItem = {
   selling_price: number;
   avg_cost_price: number;
   reorder_level: number;
+  is_service: boolean;
 };
 
 export default function InventoryScreen() {
@@ -41,6 +43,10 @@ export default function InventoryScreen() {
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
 
+  // EFRIS import state
+  const efrisEnabled = business?.is_efris_enabled ?? false;
+  const [efrisImporting, setEfrisImporting] = useState(false);
+
   const loadInventory = useCallback(async () => {
     if (!business || !currentBranch) return;
 
@@ -53,7 +59,7 @@ export default function InventoryScreen() {
         avg_cost_price,
         reorder_level,
         product_id,
-        products(id, name, barcode, image_url)
+        products(id, name, barcode, image_url, is_service)
       `)
       .eq('branch_id', currentBranch.id)
       .order('quantity', { ascending: true });
@@ -69,6 +75,7 @@ export default function InventoryScreen() {
         selling_price: row.selling_price,
         avg_cost_price: row.avg_cost_price,
         reorder_level: row.reorder_level,
+        is_service: row.products?.is_service ?? false,
       }));
       setItems(mapped);
       setFiltered(mapped);
@@ -98,8 +105,8 @@ export default function InventoryScreen() {
     const q = query ?? search;
     let base = items;
     // Apply stock filter
-    if (filter === 'out') base = base.filter((i) => i.quantity === 0);
-    else if (filter === 'low') base = base.filter((i) => i.quantity > 0 && i.quantity <= i.reorder_level);
+    if (filter === 'out') base = base.filter((i) => !i.is_service && i.quantity === 0);
+    else if (filter === 'low') base = base.filter((i) => !i.is_service && i.quantity > 0 && i.quantity <= i.reorder_level);
     // Apply search filter
     if (q) {
       const lower = q.toLowerCase();
@@ -118,13 +125,14 @@ export default function InventoryScreen() {
   };
 
   const stockStatus = (item: InventoryItem) => {
+    if (item.is_service) return { color: '#2196F3', label: 'Service' };
     if (item.quantity === 0) return { color: '#e94560', label: 'Out of Stock' };
     if (item.quantity <= item.reorder_level) return { color: '#FF9800', label: 'Low Stock' };
     return { color: '#4CAF50', label: 'In Stock' };
   };
 
-  const lowStockCount = items.filter((i) => i.quantity <= i.reorder_level).length;
-  const outOfStockCount = items.filter((i) => i.quantity === 0).length;
+  const lowStockCount = items.filter((i) => !i.is_service && i.quantity <= i.reorder_level).length;
+  const outOfStockCount = items.filter((i) => !i.is_service && i.quantity === 0).length;
 
   const handleExport = async (format: 'csv' | 'xlsx') => {
     if (!business) return;
@@ -138,6 +146,100 @@ export default function InventoryScreen() {
     } finally {
       setExporting(false);
     }
+  };
+
+  const handleEfrisImport = async () => {
+    if (!business?.efris_api_key) {
+      Alert.alert('EFRIS not configured', 'Add your EFRIS API key in Settings → EFRIS Configuration.');
+      return;
+    }
+    if (!currentBranch) return;
+
+    Alert.alert(
+      'Import from EFRIS',
+      'Fetch all your registered goods & services from EFRIS and add them to your inventory?\n\nAlready-existing items will be skipped.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Import',
+          onPress: async () => {
+            setEfrisImporting(true);
+            try {
+              const config: EfrisConfig = {
+                apiKey: business.efris_api_key!,
+                apiUrl: business.efris_api_url || '',
+                testMode: business.efris_test_mode ?? true,
+              };
+              const result = await fetchEfrisGoods(config);
+              if (!result.success) {
+                Alert.alert('Error', result.error || 'Failed to fetch goods from EFRIS');
+                return;
+              }
+
+              const activeGoods = result.goods.filter(g => g.status === 'active');
+              if (activeGoods.length === 0) {
+                Alert.alert('No Goods', 'No active goods found in your EFRIS account.');
+                return;
+              }
+
+              let added = 0, skipped = 0;
+              for (const g of activeGoods) {
+                // Skip if already imported
+                const { data: existing } = await supabase
+                  .from('products')
+                  .select('id')
+                  .eq('business_id', business.id)
+                  .eq('efris_item_code', g.item_code)
+                  .maybeSingle();
+                if (existing) { skipped++; continue; }
+
+                // Derive tax_category_code
+                let taxCat = '01';
+                if (g.is_exempt) taxCat = '03';
+                else if (g.is_zero_rate || g.tax_rate === '0') taxCat = '02';
+
+                const { data: product, error: pErr } = await supabase.from('products').insert({
+                  business_id: business.id,
+                  name: g.item_name,
+                  description: g.description || null,
+                  unit: g.unit_of_measure || '101',
+                  is_service: g.is_service,
+                  commodity_code: g.commodity_category_code || null,
+                  commodity_name: g.commodity_category_name || null,
+                  efris_item_code: g.item_code,
+                  efris_unit_code: g.unit_of_measure || '101',
+                  tax_category_code: taxCat,
+                  has_excise_tax: g.has_excise_tax,
+                  excise_duty_code: g.excise_duty_code || null,
+                }).select().single();
+
+                if (pErr || !product) { skipped++; continue; }
+
+                await supabase.from('inventory').insert({
+                  branch_id: currentBranch.id,
+                  product_id: product.id,
+                  quantity: parseInt(g.stock) || 0,
+                  selling_price: parseFloat(g.unit_price) || 0,
+                  avg_cost_price: 0,
+                  reorder_level: 5,
+                });
+                added++;
+              }
+
+              Alert.alert(
+                'Import Complete ✅',
+                `${added} product${added !== 1 ? 's' : ''} imported from EFRIS.${skipped > 0 ? `\n${skipped} already existed and were skipped.` : ''}`,
+              );
+              loadInventory();
+            } catch (e: any) {
+              Alert.alert('Error', e.message);
+            } finally {
+              setEfrisImporting(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const handleImport = async () => {
@@ -235,6 +337,12 @@ export default function InventoryScreen() {
           {importing ? <ActivityIndicator size="small" color="#FF9800" /> : <FontAwesome name="upload" size={14} color="#FF9800" />}
           <Text style={styles.ioBtnText}>Import</Text>
         </TouchableOpacity>
+        {efrisEnabled && (
+          <TouchableOpacity style={[styles.ioBtn, { borderColor: '#7C3AED33' }]} onPress={handleEfrisImport} disabled={efrisImporting}>
+            {efrisImporting ? <ActivityIndicator size="small" color="#7C3AED" /> : <FontAwesome name="cloud-download" size={14} color="#7C3AED" />}
+            <Text style={[styles.ioBtnText, { color: '#7C3AED' }]}>EFRIS</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Product List */}
@@ -268,10 +376,17 @@ export default function InventoryScreen() {
                 </View>
               </View>
               <View style={styles.productRight}>
-                <View style={[styles.qtyBadge, { backgroundColor: status.color + '22', borderColor: status.color }]}>
-                  <Text style={[styles.qtyText, { color: status.color }]}>{item.quantity}</Text>
-                  <Text style={[styles.qtyLabel, { color: status.color }]}>units</Text>
-                </View>
+                {item.is_service ? (
+                  <View style={[styles.qtyBadge, { backgroundColor: '#2196F322', borderColor: '#2196F3' }]}>
+                    <FontAwesome name="wrench" size={14} color="#2196F3" />
+                    <Text style={[styles.qtyLabel, { color: '#2196F3' }]}>Service</Text>
+                  </View>
+                ) : (
+                  <View style={[styles.qtyBadge, { backgroundColor: status.color + '22', borderColor: status.color }]}>
+                    <Text style={[styles.qtyText, { color: status.color }]}>{item.quantity}</Text>
+                    <Text style={[styles.qtyLabel, { color: status.color }]}>units</Text>
+                  </View>
+                )}
               </View>
             </TouchableOpacity>
           );

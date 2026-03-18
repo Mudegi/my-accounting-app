@@ -40,6 +40,7 @@ type CartItem = {
   cost_price: number;
   quantity: number;
   stock_quantity: number;    // available stock for validation
+  is_service: boolean;
   tax_rate: number;
   tax_code: string; // EFRIS tax category code
   discount: string;          // raw discount input per item
@@ -55,6 +56,7 @@ type InventoryItem = {
   avg_cost_price: number;
   stock_quantity: number;
   tax_category_code: string;
+  is_service: boolean;
 };
 
 const SALE_TAX_OPTIONS = [
@@ -192,26 +194,29 @@ export default function SalesScreen() {
     const { data } = await supabase
       .from('products')
       .select(`
-        id, name, barcode, image_url, tax_category_code,
+        id, name, barcode, image_url, tax_category_code, is_service,
         inventory!inner(selling_price, avg_cost_price, quantity)
       `)
       .eq('business_id', business.id)
       .eq('inventory.branch_id', currentBranch.id)
-      .gt('inventory.quantity', 0)
       .order('name')
       .limit(50);
 
     if (data) {
-      const results: InventoryItem[] = data.map((p: any) => ({
-        id: p.id,
-        name: p.name,
-        barcode: p.barcode,
-        image_url: p.image_url,
-        selling_price: p.inventory[0]?.selling_price || 0,
-        avg_cost_price: p.inventory[0]?.avg_cost_price || 0,
-        stock_quantity: p.inventory[0]?.quantity || 0,
-        tax_category_code: p.tax_category_code || '01',
-      }));
+      // Include all services (regardless of stock) and products with stock > 0
+      const results: InventoryItem[] = data
+        .filter((p: any) => p.is_service || (p.inventory[0]?.quantity || 0) > 0)
+        .map((p: any) => ({
+          id: p.id,
+          name: p.name,
+          barcode: p.barcode,
+          image_url: p.image_url,
+          selling_price: p.inventory[0]?.selling_price || 0,
+          avg_cost_price: p.inventory[0]?.avg_cost_price || 0,
+          stock_quantity: p.inventory[0]?.quantity || 0,
+          tax_category_code: p.tax_category_code || '01',
+          is_service: p.is_service ?? false,
+        }));
       setAllProducts(results);
       setSearchResults(results);
     }
@@ -234,7 +239,7 @@ export default function SalesScreen() {
     const { data } = await supabase
       .from('products')
       .select(`
-        id, name, barcode, image_url, tax_category_code,
+        id, name, barcode, image_url, tax_category_code, is_service,
         inventory!inner(selling_price, avg_cost_price, quantity)
       `)
       .eq('business_id', business.id)
@@ -252,6 +257,7 @@ export default function SalesScreen() {
         avg_cost_price: p.inventory[0]?.avg_cost_price || 0,
         stock_quantity: p.inventory[0]?.quantity || 0,
         tax_category_code: p.tax_category_code || '01',
+        is_service: p.is_service ?? false,
       }));
       setSearchResults(results);
     }
@@ -264,7 +270,7 @@ export default function SalesScreen() {
     const { data } = await supabase
       .from('products')
       .select(`
-        id, name, barcode, image_url, tax_category_code,
+        id, name, barcode, image_url, tax_category_code, is_service,
         inventory!inner(selling_price, avg_cost_price, quantity)
       `)
       .eq('business_id', business.id)
@@ -283,6 +289,7 @@ export default function SalesScreen() {
         avg_cost_price: inv?.avg_cost_price || 0,
         stock_quantity: inv?.quantity || 0,
         tax_category_code: (data as any).tax_category_code || '01',
+        is_service: (data as any).is_service ?? false,
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } else {
@@ -310,7 +317,7 @@ export default function SalesScreen() {
     setCart((prev) => {
       const existing = prev.find((item) => item.product_id === product.id);
       if (existing) {
-        if (existing.quantity >= existing.stock_quantity) {
+        if (!product.is_service && existing.quantity >= existing.stock_quantity) {
           Alert.alert('Stock Limit', `Only ${existing.stock_quantity} unit(s) of "${existing.name}" available in stock.`);
           return prev;
         }
@@ -320,7 +327,7 @@ export default function SalesScreen() {
             : item
         );
       }
-      if (product.stock_quantity <= 0) {
+      if (!product.is_service && product.stock_quantity <= 0) {
         Alert.alert('Out of Stock', `"${product.name}" is out of stock.`);
         return prev;
       }
@@ -335,6 +342,7 @@ export default function SalesScreen() {
           cost_price: product.avg_cost_price,
           quantity: 1,
           stock_quantity: product.stock_quantity,
+          is_service: product.is_service,
           tax_rate: defaultTaxRate,
           tax_code: defaultTaxCode,
           discount: '0',
@@ -480,8 +488,10 @@ export default function SalesScreen() {
       if (itemsError) throw itemsError;
 
       // Decrement inventory and calculate true COGS using AVCO returned from DB
+      // Services don't have stock — skip decrement for them
       let actualCOGS = 0;
       for (const item of cart) {
+        if (item.is_service) continue;
         const { data: avcoValue } = await supabase.rpc('decrement_inventory', {
           p_branch_id: currentBranch.id,
           p_product_id: item.product_id,

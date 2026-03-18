@@ -239,6 +239,49 @@ export async function testEfrisConnection(apiKey: string, apiUrl?: string): Prom
   }
 }
 
+// ─── 7. Fetch Registered Goods & Services ────────────────────────
+
+export type EfrisGoodsItem = {
+  item_code: string;
+  item_name: string;
+  is_service: boolean;
+  description: string;
+  commodity_category_code: string;
+  commodity_category_name: string;
+  unit_of_measure: string;
+  unit_price: string;
+  currency: string;
+  tax_rate: string;
+  is_zero_rate: boolean;
+  is_exempt: boolean;
+  has_excise_tax: boolean;
+  excise_duty_code: string;
+  excise_duty_name: string;
+  excise_rate: string;
+  stock: string;
+  status: string;
+  goods_type: string;
+};
+
+export async function fetchEfrisGoods(
+  config: EfrisConfig,
+  params?: { goods_code?: string; goods_name?: string; search?: string; service_only?: boolean }
+): Promise<{ success: boolean; goods: EfrisGoodsItem[]; total: number; error?: string }> {
+  return withRetry(async () => {
+    let qs = '';
+    if (params) {
+      const q = new URLSearchParams();
+      if (params.goods_code) q.set('goods_code', params.goods_code);
+      if (params.goods_name) q.set('goods_name', params.goods_name);
+      if (params.search) q.set('search', params.search);
+      if (params.service_only !== undefined) q.set('service_only', String(params.service_only));
+      qs = q.toString() ? `?${q.toString()}` : '';
+    }
+    const result = await efrisFetch('GET', `/goods${qs}`, config.apiKey, undefined, config.apiUrl);
+    return { success: true, goods: result.goods || [], total: result.total || 0 };
+  });
+}
+
 // ─── Helper: Build Invoice Payload (Simple Format) ──────────────
 
 export function buildInvoicePayload(
