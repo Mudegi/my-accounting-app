@@ -199,8 +199,7 @@ export default function SalesScreen() {
       `)
       .eq('business_id', business.id)
       .eq('inventory.branch_id', currentBranch.id)
-      .order('name')
-      .limit(50);
+      .order('name');
 
     if (data) {
       // Include all services (regardless of stock) and products with stock > 0
@@ -244,8 +243,7 @@ export default function SalesScreen() {
       `)
       .eq('business_id', business.id)
       .eq('inventory.branch_id', currentBranch?.id)
-      .ilike('name', `%${query}%`)
-      .limit(20);
+      .ilike('name', `%${query}%`);
 
     if (data) {
       const results: InventoryItem[] = data.map((p: any) => ({

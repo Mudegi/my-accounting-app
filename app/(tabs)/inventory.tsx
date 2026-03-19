@@ -207,6 +207,8 @@ export default function InventoryScreen() {
                   commodity_code: g.commodity_category_code || null,
                   commodity_name: g.commodity_category_name || null,
                   efris_item_code: g.item_code,
+                  efris_product_code: g.item_code,
+                  efris_registered_at: new Date().toISOString(),
                   efris_unit_code: g.unit_of_measure || '101',
                   tax_category_code: taxCat,
                   has_excise_tax: g.has_excise_tax,
