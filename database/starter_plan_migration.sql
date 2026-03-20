@@ -7,7 +7,7 @@
 -- Insert new starter plan at 30K UGX/mo
 INSERT INTO subscription_plans (name, display_name, description, price_monthly, price_yearly, currency, trial_days, max_branches, max_users, max_products, features, sort_order, is_active)
 VALUES
-  ('starter', 'YourBooks Starter', 'POS, inventory & receipts for small shops', 30000, 300000, 'UGX', 0, 1, 2, 100,
+  ('starter', 'YourBooks Starter', 'POS, inventory & receipts for small shops', 30000, 300000, 'UGX', 0, 1, 1, 100,
    '["pos", "inventory", "receipts"]'::jsonb, 2, true)
 ON CONFLICT (name) DO UPDATE SET
   display_name = EXCLUDED.display_name,

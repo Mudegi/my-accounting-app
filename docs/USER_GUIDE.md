@@ -172,8 +172,8 @@ After your first sign-in, the app walks you through a 3-step setup:
 
 | Plan | Price | Features |
 |------|-------|----------|
-| **Free Trial** | Free for 14 days | Full access to all features |
-| **Starter** | UGX 30,000/month | POS, Basic Inventory, Receipts (1 branch, 2 users, 100 products) |
+| **Free Trial** | Free for 7 days | Full access to all features |
+| **Starter** | UGX 30,000/month | POS, Basic Inventory, Receipts (1 branch, 1 user, 100 products) |
 | **Basic** | UGX 70,000/month | + Reports, Expenses, Multi-branch, Credit Notes (unlimited) |
 | **Pro** | UGX 220,000/month | + Full Accounting, Tax Center, Data Export (unlimited) |
 
@@ -1125,7 +1125,7 @@ Purchases are submitted to EFRIS as stock increase notifications, registering in
 
 | Feature | Free Trial | Starter | Basic | Pro |
 |---------|-----------|---------|-------|-----|
-| **Price** | Free (14 days) | 30,000 UGX/mo | 70,000 UGX/mo | 220,000 UGX/mo |
+| **Price** | Free (7 days) | 30,000 UGX/mo | 70,000 UGX/mo | 220,000 UGX/mo |
 | **POS & Sales** | ✅ | ✅ | ✅ | ✅ |
 | **Inventory** | ✅ | ✅ | ✅ | ✅ |
 | **Receipts** | ✅ | ✅ | ✅ | ✅ |

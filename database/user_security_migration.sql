@@ -328,7 +328,7 @@ $$;
 UPDATE subscription_plans SET max_users = 3   WHERE name = 'free_trial';
 UPDATE subscription_plans SET max_users = 10  WHERE name = 'basic';
 UPDATE subscription_plans SET max_users = 25  WHERE name = 'pro';
-UPDATE subscription_plans SET max_users = 2   WHERE name = 'starter';
+UPDATE subscription_plans SET max_users = 1   WHERE name = 'starter';
 
 -- RPC: Check if business can add more users
 CREATE OR REPLACE FUNCTION check_user_limit(p_business_id UUID)

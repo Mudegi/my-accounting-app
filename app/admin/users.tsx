@@ -63,14 +63,36 @@ export default function UsersScreen() {
       setUserLimit({ max: limitData.max_users, current: limitData.current_count ?? 0 });
     }
 
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('profiles')
       .select(`id, full_name, role, sales_type, branch_id, is_active, suspended_at, deleted_at, suspension_reason, branches(name)`)
       .eq('business_id', business.id)
       .is('deleted_at', null)
       .order('full_name');
 
-    if (data) {
+    if (error) {
+      // Fallback: query without optional columns that may not exist yet
+      const { data: fallbackData } = await supabase
+        .from('profiles')
+        .select(`id, full_name, role, sales_type, branch_id, branches(name)`)
+        .eq('business_id', business.id)
+        .order('full_name');
+
+      if (fallbackData) {
+        setUsers(fallbackData.map((u: any) => ({
+          id: u.id,
+          full_name: u.full_name,
+          role: u.role,
+          sales_type: u.sales_type || 'in_store',
+          branch_id: u.branch_id,
+          branch_name: u.branches?.name || null,
+          is_active: true,
+          suspended_at: null,
+          deleted_at: null,
+          suspension_reason: null,
+        })));
+      }
+    } else if (data) {
       setUsers(data.map((u: any) => ({
         id: u.id,
         full_name: u.full_name,

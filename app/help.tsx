@@ -77,7 +77,7 @@ const getGuideSections = (efris: boolean): GuideSection[] => [
         ],
         tips: [
           'You can change your business details later in Settings.',
-          'The 14-day free trial gives you full access to all features.',
+          'The 7-day free trial gives you full access to all features.',
         ],
       },
       {
@@ -95,7 +95,7 @@ const getGuideSections = (efris: boolean): GuideSection[] => [
           'Starter plan is great for small shops just getting started.',
           'Basic plan adds reports, expenses, and multi-branch support.',
           'Pro plan includes full accounting, tax center, and data export.',
-          'Your free trial gives full Pro features for 14 days.',
+          'Your free trial gives full Pro features for 7 days.',
         ],
       },
     ],

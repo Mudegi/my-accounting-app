@@ -121,6 +121,23 @@ export default function SettingsScreen() {
   const canDoFieldSales = isAdminOrManager || profile?.sales_type === 'field' || profile?.sales_type === 'both';
   const isFieldOnly = profile?.role === 'salesperson' && profile?.sales_type === 'field';
 
+  // Check if user has active field stock assignments (auto-show field sales section)
+  const [hasFieldAssignments, setHasFieldAssignments] = useState(false);
+  useEffect(() => {
+    if (profile && !canDoFieldSales) {
+      supabase
+        .from('field_stock_assignments')
+        .select('id')
+        .eq('user_id', profile.id)
+        .eq('status', 'active')
+        .limit(1)
+        .then(({ data }) => {
+          if (data && data.length > 0) setHasFieldAssignments(true);
+        });
+    }
+  }, [profile]);
+  const showFieldSales = canDoFieldSales || hasFieldAssignments;
+
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
     <ScrollView style={styles.container}>
@@ -317,7 +334,7 @@ export default function SettingsScreen() {
       )}
 
       {/* Field Sales */}
-      {canDoFieldSales && (
+      {showFieldSales && (
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Field Sales</Text>
         {isAdmin && (

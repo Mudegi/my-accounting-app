@@ -134,7 +134,7 @@ CREATE TABLE IF NOT EXISTS subscription_plans (
 -- Seed plans (2 tiers: Basic without EFRIS, Pro with EFRIS)
 INSERT INTO subscription_plans (name, display_name, description, price_monthly, price_yearly, currency, trial_days, max_branches, max_users, max_products, features, sort_order)
 VALUES
-  ('free_trial', 'Free Trial', '14-day free access to all features', 0, 0, 'UGX', 14, -1, -1, -1,
+  ('free_trial', 'Free Trial', '7-day free access to all features', 0, 0, 'UGX', 7, -1, -1, -1,
    '["pos", "inventory", "reports", "receipts", "expenses", "multi_branch", "accounting", "credit_notes", "efris"]'::jsonb, 1),
 
   ('basic', 'YourBooks Basic', 'All features without EFRIS integration', 70000, 700000, 'UGX', 0, -1, -1, -1,
@@ -277,9 +277,9 @@ BEGIN
     WHERE id NOT IN (SELECT business_id FROM subscriptions)
   LOOP
     INSERT INTO subscriptions (business_id, plan_id, status, billing_cycle, current_period_start, current_period_end, trial_ends_at)
-    VALUES (biz.id, trial_plan_id, 'trial', 'monthly', now(), now() + interval '14 days', now() + interval '14 days');
+    VALUES (biz.id, trial_plan_id, 'trial', 'monthly', now(), now() + interval '7 days', now() + interval '7 days');
 
-    UPDATE businesses SET subscription_status = 'trial', subscription_ends_at = now() + interval '14 days'
+    UPDATE businesses SET subscription_status = 'trial', subscription_ends_at = now() + interval '7 days'
     WHERE id = biz.id AND subscription_status IS NULL;
   END LOOP;
 END;

@@ -104,7 +104,7 @@ export default function OnboardingScreen() {
     try {
       // Create subscription (trial)
       const plan = plans.find((p) => p.id === selectedPlan);
-      const trialDays = plan?.trial_days || 14;
+      const trialDays = plan?.trial_days || 7;
       const periodEnd = new Date();
       periodEnd.setDate(periodEnd.getDate() + (trialDays > 0 ? trialDays : 30));
 
