@@ -71,12 +71,14 @@ export default function UsersScreen() {
       .order('full_name');
 
     if (error) {
-      // Fallback: query without optional columns that may not exist yet
-      const { data: fallbackData } = await supabase
+      // Fallback 1: without soft-delete columns
+      const { data: f1, error: e1 } = await supabase
         .from('profiles')
-        .select(`id, full_name, role, sales_type, branch_id, branches(name)`)
+        .select(`id, full_name, role, sales_type, branch_id, is_active, branches(name)`)
         .eq('business_id', business.id)
         .order('full_name');
+
+      const fallbackData = f1 ?? (e1 ? null : null);
 
       if (fallbackData) {
         setUsers(fallbackData.map((u: any) => ({
@@ -86,11 +88,32 @@ export default function UsersScreen() {
           sales_type: u.sales_type || 'in_store',
           branch_id: u.branch_id,
           branch_name: u.branches?.name || null,
-          is_active: true,
+          is_active: u.is_active ?? true,
           suspended_at: null,
           deleted_at: null,
           suspension_reason: null,
         })));
+      } else {
+        // Fallback 2: absolute minimum columns
+        const { data: f2 } = await supabase
+          .from('profiles')
+          .select(`id, full_name, role, branch_id, is_active, branches(name)`)
+          .eq('business_id', business.id)
+          .order('full_name');
+        if (f2) {
+          setUsers(f2.map((u: any) => ({
+            id: u.id,
+            full_name: u.full_name,
+            role: u.role,
+            sales_type: 'in_store' as const,
+            branch_id: u.branch_id,
+            branch_name: u.branches?.name || null,
+            is_active: u.is_active ?? true,
+            suspended_at: null,
+            deleted_at: null,
+            suspension_reason: null,
+          })));
+        }
       }
     } else if (data) {
       setUsers(data.map((u: any) => ({

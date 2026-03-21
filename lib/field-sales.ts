@@ -196,9 +196,7 @@ export async function getAssignments(params: {
     .select(`
       *, 
       products(name),
-      branches(name),
-      assigner:profiles!field_stock_assignments_assigned_by_fkey(full_name),
-      assignee:profiles!field_stock_assignments_user_id_fkey(full_name)
+      branches(name)
     `)
     .eq('business_id', params.businessId)
     .order('assigned_at', { ascending: false });
@@ -220,7 +218,7 @@ export async function getAssignments(params: {
     qty_assigned: a.qty_assigned,
     qty_returned: a.qty_returned,
     assigned_by: a.assigned_by,
-    assigned_by_name: a.assigner?.full_name || '?',
+    assigned_by_name: a.assigned_by || '?',
     assigned_at: a.assigned_at,
     returned_at: a.returned_at,
     status: a.status,

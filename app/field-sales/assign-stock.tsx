@@ -177,7 +177,7 @@ export default function AssignStockScreen() {
                 <View style={{ flex: 1, backgroundColor: 'transparent' }}>
                   <Text style={styles.cardProduct}>{item.product_name}</Text>
                   <Text style={styles.cardMeta}>
-                    👤 {item.assigned_by_name} → {users.find(u => u.id === item.user_id)?.full_name || '?'}
+                    👤 {users.find(u => u.id === item.assigned_by)?.full_name || 'Admin'} → {users.find(u => u.id === item.user_id)?.full_name || '?'}
                   </Text>
                   <Text style={styles.cardMeta}>📍 {item.branch_name} · {formatDate(item.assigned_at)}</Text>
                 </View>
