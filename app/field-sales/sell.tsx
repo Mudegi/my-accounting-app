@@ -304,9 +304,12 @@ export default function FieldSellScreen() {
 
     setCompleting(true);
     try {
-      // Try to get fresh GPS
+      // Try to get fresh GPS (High accuracy to get actual location, not cached)
       try {
-        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        const loc = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.High,
+          maximumAge: 10000, // reject cached positions older than 10s
+        });
         setGpsLat(loc.coords.latitude);
         setGpsLng(loc.coords.longitude);
       } catch { /* use existing coords */ }
