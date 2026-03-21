@@ -36,17 +36,15 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Sell',
+          title: isFieldOnly ? 'Field Sale' : 'Sell',
           tabBarIcon: ({ color }) => <TabBarIcon name="shopping-cart" color={color} />,
-          href: isFieldOnly ? null : '/(tabs)',
         }}
       />
       <Tabs.Screen
         name="inventory"
         options={{
-          title: 'Inventory',
+          title: isFieldOnly ? 'My Stock' : 'Inventory',
           tabBarIcon: ({ color }) => <TabBarIcon name="cube" color={color} />,
-          href: isFieldOnly ? null : '/(tabs)/inventory',
         }}
       />
       <Tabs.Screen

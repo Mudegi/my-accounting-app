@@ -15,7 +15,8 @@ import { Text, View } from '@/components/Themed';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { useFocusEffect, useRouter, Redirect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
+import MyStockScreen from '../field-sales/my-stock';
 import { exportData, importData } from '@/lib/import-export';
 import { fetchEfrisGoods, type EfrisConfig } from '@/lib/efris';
 
@@ -36,9 +37,9 @@ export default function InventoryScreen() {
   const { business, currentBranch, fmt, profile } = useAuth();
   const router = useRouter();
 
-  // Field-only salespeople have no access to main inventory
+  // Field-only salespeople see their assigned stock within the same tab
   if (profile && profile.sales_type === 'field') {
-    return <Redirect href={'/field-sales/my-stock' as any} />;
+    return <MyStockScreen />;
   }
 
   const [items, setItems] = useState<InventoryItem[]>([]);

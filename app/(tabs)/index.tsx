@@ -20,6 +20,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useRouter, Redirect } from 'expo-router';
+import FieldSellScreen from '../field-sales/sell';
 import { postSaleEntry, PAYMENT_METHODS } from '@/lib/accounting';
 import {
   fiscalizeInvoice,
@@ -70,9 +71,9 @@ export default function SalesScreen() {
   const { currentBranch, business, profile, fmt, currency } = useAuth();
   const router = useRouter();
 
-  // Field-only salespeople must use the Field Sales screen instead
+  // Field-only salespeople see the Field Sell screen within the same tab
   if (profile && profile.sales_type === 'field') {
-    return <Redirect href="/field-sales/sell" />;
+    return <FieldSellScreen />;
   }
 
   const [permission, requestPermission] = useCameraPermissions();
