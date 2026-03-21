@@ -10,13 +10,14 @@ import {
   Modal,
   KeyboardAvoidingView,
   Platform,
+  BackHandler,
 } from 'react-native';
 import { Text, View } from '@/components/Themed';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 import { getAssignments, type FieldStockAssignment } from '@/lib/field-sales';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import * as Location from 'expo-location';
 
 type CartItem = {
@@ -51,7 +52,8 @@ const PAYMENT_OPTIONS = [
 
 export default function FieldSellScreen() {
   const { business, profile, fmt, currentBranch } = useAuth();
-  const [assignments, setAssignments] = useState<FieldStockAssignment[]>([]);
+  const router = useRouter();
+ = useState<FieldStockAssignment[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [completing, setCompleting] = useState(false);
@@ -95,7 +97,19 @@ export default function FieldSellScreen() {
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
-  // Request GPS on mount
+  // Prevent hardware back button from closing the app
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (showCheckout) {
+        setShowCheckout(false);
+        return true;
+      }
+      // At the root of field sales — do nothing instead of quitting
+      return true;
+    });
+    return () => sub.remove();
+  }, [showCheckout]);
+
   useEffect(() => {
     (async () => {
       setGpsLoading(true);
@@ -789,12 +803,32 @@ export default function FieldSellScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* Bottom nav bar — field-only users have no tab bar, so provide one */}
+      <View style={styles.bottomNav}>
+        <TouchableOpacity style={styles.bottomNavItem} onPress={() => router.push('/field-sales/sell' as any)}>
+          <FontAwesome name="shopping-cart" size={20} color="#e94560" />
+          <Text style={[styles.bottomNavLabel, { color: '#e94560' }]}>Sell</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.bottomNavItem} onPress={() => router.push('/field-sales/my-stock' as any)}>
+          <FontAwesome name="cubes" size={20} color="#aaa" />
+          <Text style={styles.bottomNavLabel}>My Stock</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.bottomNavItem} onPress={() => router.push('/field-sales/field-customers' as any)}>
+          <FontAwesome name="users" size={20} color="#aaa" />
+          <Text style={styles.bottomNavLabel}>Customers</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.bottomNavItem} onPress={() => router.push('/(tabs)/settings' as any)}>
+          <FontAwesome name="cog" size={20} color="#aaa" />
+          <Text style={styles.bottomNavLabel}>Settings</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#1a1a2e', padding: 16 },
+  container: { flex: 1, backgroundColor: '#1a1a2e', padding: 16, paddingBottom: 0 },
   gpsBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#16213e', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, marginBottom: 12 },
   sectionTitle: { color: '#888', fontSize: 12, fontWeight: 'bold', letterSpacing: 1, marginBottom: 8 },
   cartSection: { backgroundColor: '#0f3460', borderRadius: 16, padding: 14, marginBottom: 14 },
@@ -852,4 +886,7 @@ const styles = StyleSheet.create({
   completeBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
   cancelBtn: { padding: 14, alignItems: 'center', marginTop: 8 },
   cancelBtnText: { color: '#aaa', fontSize: 15 },
+  bottomNav: { flexDirection: 'row', backgroundColor: '#16213e', borderTopWidth: 1, borderTopColor: '#0f3460', paddingBottom: 4 },
+  bottomNavItem: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 10, backgroundColor: 'transparent' },
+  bottomNavLabel: { color: '#aaa', fontSize: 10, marginTop: 3, fontWeight: '600' },
 });
