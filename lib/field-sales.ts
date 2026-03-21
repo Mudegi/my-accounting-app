@@ -37,7 +37,7 @@ export type PendingFieldSale = {
   gps_lat: number | null;
   gps_lng: number | null;
   item_count: number;
-  items: { product_name: string; quantity: number; unit_price: number; line_total: number }[];
+  items: { product_name: string; quantity: number; unit_price: number; discount_amount: number; tax_rate: number; line_total: number }[];
 };
 
 // ─── Admin: Assign Stock ─────────────────────────────────────────
@@ -361,7 +361,7 @@ export async function getPendingFieldSales(businessId: string): Promise<PendingF
       id, total_amount, subtotal, tax_amount, discount_amount,
       payment_method, created_at, seller_id, customer_name,
       customer_phone, gps_lat, gps_lng,
-      sale_items(product_name, quantity, unit_price, line_total)
+      sale_items(product_name, quantity, unit_price, discount_amount, tax_rate, line_total)
     `)
     .eq('business_id', businessId)
     .eq('is_field_sale', true)
@@ -401,6 +401,8 @@ export async function getPendingFieldSales(businessId: string): Promise<PendingF
       product_name: i.product_name,
       quantity: i.quantity,
       unit_price: Number(i.unit_price),
+      discount_amount: Number(i.discount_amount || 0),
+      tax_rate: Number(i.tax_rate || 0),
       line_total: Number(i.line_total),
     })),
   }));

@@ -15,7 +15,7 @@ import { Text, View } from '@/components/Themed';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect, useRouter, Redirect } from 'expo-router';
 import { exportData, importData } from '@/lib/import-export';
 import { fetchEfrisGoods, type EfrisConfig } from '@/lib/efris';
 
@@ -33,8 +33,14 @@ type InventoryItem = {
 };
 
 export default function InventoryScreen() {
-  const { business, currentBranch, fmt } = useAuth();
+  const { business, currentBranch, fmt, profile } = useAuth();
   const router = useRouter();
+
+  // Field-only salespeople have no access to main inventory
+  if (profile && profile.sales_type === 'field') {
+    return <Redirect href={'/field-sales/my-stock' as any} />;
+  }
+
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [filtered, setFiltered] = useState<InventoryItem[]>([]);
   const [search, setSearch] = useState('');

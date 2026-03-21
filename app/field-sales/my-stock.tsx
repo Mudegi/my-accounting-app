@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   StyleSheet,
   TouchableOpacity,
@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { Text, View } from '@/components/Themed';
 import { useAuth } from '@/lib/auth';
+import { supabase } from '@/lib/supabase';
 import { getAssignments, returnStock, type FieldStockAssignment } from '@/lib/field-sales';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useFocusEffect } from 'expo-router';
@@ -19,12 +20,26 @@ import { useFocusEffect } from 'expo-router';
 export default function MyStockScreen() {
   const { business, profile, fmt } = useAuth();
   const [assignments, setAssignments] = useState<FieldStockAssignment[]>([]);
+  const [teamMembers, setTeamMembers] = useState<{ id: string; full_name: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [showReturn, setShowReturn] = useState(false);
   const [returningId, setReturningId] = useState<string | null>(null);
   const [returnQty, setReturnQty] = useState('');
   const [returning, setReturning] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>('active');
+
+  // Load team members for name lookup
+  useEffect(() => {
+    if (!business) return;
+    supabase
+      .from('profiles')
+      .select('id, full_name')
+      .eq('business_id', business.id)
+      .then(({ data }) => { if (data) setTeamMembers(data); });
+  }, [business]);
+
+  const resolveAssignerName = (assignedById: string) =>
+    teamMembers.find(m => m.id === assignedById)?.full_name || 'Admin';
 
   const load = useCallback(async () => {
     if (!business || !profile) return;
@@ -138,7 +153,7 @@ export default function MyStockScreen() {
                   <View style={{ flex: 1, backgroundColor: 'transparent' }}>
                     <Text style={styles.cardProduct}>{item.product_name}</Text>
                     <Text style={styles.cardMeta}>📍 {item.branch_name} · {formatDate(item.assigned_at)}</Text>
-                    <Text style={styles.cardMeta}>Assigned by {item.assigned_by_name}</Text>
+                    <Text style={styles.cardMeta}>Assigned by {resolveAssignerName(item.assigned_by)}</Text>
                   </View>
                   <View style={[styles.statusBadge, { backgroundColor: statusColor(item.status) + '22', borderColor: statusColor(item.status) }]}>
                     <Text style={[styles.statusText, { color: statusColor(item.status) }]}>

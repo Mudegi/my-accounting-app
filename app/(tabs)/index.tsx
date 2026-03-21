@@ -19,7 +19,7 @@ import * as Haptics from 'expo-haptics';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { useRouter } from 'expo-router';
+import { useRouter, Redirect } from 'expo-router';
 import { postSaleEntry, PAYMENT_METHODS } from '@/lib/accounting';
 import {
   fiscalizeInvoice,
@@ -69,6 +69,12 @@ const SALE_TAX_OPTIONS = [
 export default function SalesScreen() {
   const { currentBranch, business, profile, fmt, currency } = useAuth();
   const router = useRouter();
+
+  // Field-only salespeople must use the Field Sales screen instead
+  if (profile && profile.sales_type === 'field') {
+    return <Redirect href="/field-sales/sell" />;
+  }
+
   const [permission, requestPermission] = useCameraPermissions();
   const [cart, setCart] = useState<CartItem[]>([]);
   const [scanning, setScanning] = useState(false);
