@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "YourBooks Lite",
+    "name": "YourBooks Pos",
     "slug": "yourbooks-lite",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "yourbookslite",
@@ -25,6 +25,7 @@
       "softwareKeyboardLayoutMode": "pan",
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
+      "versionCode": 2,
       "package": "com.yourbooks.lite",
       "permissions": [
         "android.permission.CAMERA",
@@ -42,7 +43,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Allow YourBooks to use the camera for barcode scanning"
+          "cameraPermission": "Allow YourBooks Pos to use the camera for barcode scanning"
         }
       ]
     ],
