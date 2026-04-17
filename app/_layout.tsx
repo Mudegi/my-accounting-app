@@ -135,29 +135,45 @@ function RootLayoutNav() {
 
   if (showSpinner) {
     let loadingText = 'Loading YourBooks...';
-    if (isInitializing) loadingText = 'Creating your business account...';
-    else if (isSyncing) loadingText = 'Finalizing your account setup...';
+    let subtext = 'Designing your financial future';
+    
+    if (isInitializing) {
+      loadingText = 'Creating Account...';
+      subtext = 'Setting up your business workspace';
+    } else if (isSyncing) {
+      loadingText = 'Syncing Data...';
+      subtext = 'Finalizing your account setup';
+    }
+
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#1a1a2e', paddingHorizontal: 32 }}>
-        <ActivityIndicator size="large" color="#e94560" />
+        <View style={{ marginBottom: 40, alignItems: 'center' }}>
+          <Text style={{ fontSize: 32, fontWeight: 'bold', color: '#e94560', marginBottom: 10 }}>📒 YourBooks</Text>
+          <ActivityIndicator size="large" color="#e94560" />
+        </View>
+        
+        <Text style={{ color: '#fff', fontSize: 20, fontWeight: '600', marginBottom: 8 }}>{loadingText}</Text>
+        <Text style={{ color: '#aaa', fontSize: 14, textAlign: 'center' }}>{subtext}</Text>
+
         {loadingTooLong && (
-          <>
-            <Text style={{ color: '#aaa', fontSize: 14, textAlign: 'center', marginTop: 20, lineHeight: 20 }}>
+          <View style={{ marginTop: 40, alignItems: 'center', width: '100%' }}>
+            <Text style={{ color: '#e94560', fontSize: 13, fontWeight: 'bold', marginBottom: 8 }}>POOR CONNECTION</Text>
+            <Text style={{ color: '#888', fontSize: 13, textAlign: 'center', lineHeight: 20, marginBottom: 20 }}>
               {isSyncing ? "We're having trouble syncing your profile data." : "Loading is taking longer than usual."}{'\n'}Please check your internet connection.
             </Text>
             <TouchableOpacity
               onPress={() => { setLoadingTooLong(false); reloadUserData(); }}
-              style={{ marginTop: 16, backgroundColor: '#e94560', borderRadius: 12, paddingHorizontal: 24, paddingVertical: 12 }}
+              style={{ width: '100%', backgroundColor: '#e94560', borderRadius: 12, paddingVertical: 14, alignItems: 'center' }}
             >
-              <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 15 }}>Retry Sync</Text>
+              <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 15 }}>Retry Connection</Text>
             </TouchableOpacity>
             <TouchableOpacity
               onPress={() => signOut()}
-              style={{ marginTop: 12, paddingHorizontal: 24, paddingVertical: 10 }}
+              style={{ marginTop: 16, paddingVertical: 10 }}
             >
-              <Text style={{ color: '#888', fontSize: 14 }}>Sign Out</Text>
+              <Text style={{ color: '#666', fontSize: 14, textDecorationLine: 'underline' }}>Sign Out</Text>
             </TouchableOpacity>
-          </>
+          </View>
         )}
       </View>
     );

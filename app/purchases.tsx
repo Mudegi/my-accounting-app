@@ -24,6 +24,7 @@ type Purchase = {
   total_amount: number;
   created_at: string;
   created_by_name: string;
+  payment_method: string;
   efris_submitted?: boolean;
 };
 
@@ -54,14 +55,45 @@ export default function PurchasesScreen() {
 
   const load = useCallback(async () => {
     if (!business || !currentBranch) return;
-    const { data } = await supabase
+    
+    // Fetch purchases for current branch. 
+    // We removed 'profiles(full_name)' join because it was causing query failures.
+    const { data, error } = await supabase
       .from('purchases')
-      .select(`id, supplier_name, total_amount, created_at, efris_submitted, profiles(full_name)`)
+      .select(`id, supplier_name, total_amount, created_at, efris_submitted, created_by, payment_method`)
       .eq('business_id', business.id)
       .eq('branch_id', currentBranch.id)
       .order('created_at', { ascending: false })
-      .limit(30);
-    if (data) setPurchases(data.map((p: any) => ({ id: p.id, supplier_name: p.supplier_name, total_amount: p.total_amount, created_at: p.created_at, created_by_name: p.profiles?.full_name || '?', efris_submitted: p.efris_submitted })));
+      .limit(50);
+
+    if (error) {
+      console.error('Error loading purchases:', error);
+      return;
+    }
+
+    if (data) {
+      // Manually resolve creator names from profiles
+      const creatorIds = [...new Set(data.map((p: any) => p.created_by).filter(Boolean))];
+      const creatorMap: Record<string, string> = {};
+      
+      if (creatorIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, full_name')
+          .in('id', creatorIds);
+        profiles?.forEach(p => { creatorMap[p.id] = p.full_name; });
+      }
+
+      setPurchases(data.map((p: any) => ({
+        id: p.id,
+        supplier_name: p.supplier_name,
+        total_amount: p.total_amount,
+        created_at: p.created_at,
+        created_by_name: creatorMap[p.created_by] || '?',
+        payment_method: p.payment_method || 'cash',
+        efris_submitted: p.efris_submitted
+      })));
+    }
   }, [business, currentBranch]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
@@ -307,7 +339,12 @@ export default function PurchasesScreen() {
           <TextInput style={styles.input} placeholder={`VAT Amount on Purchase (${currency.symbol}, optional)`} placeholderTextColor="#555" value={vatAmount} onChangeText={setVatAmount} keyboardType="numeric" />
 
           {/* Payment Method */}
-          <Text style={styles.label}>Payment Method</Text>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, backgroundColor: 'transparent' }}>
+            <Text style={[styles.label, { marginBottom: 0 }]}>Payment Method</Text>
+            {purchasePayMethod === 'credit' && (
+              <Text style={{ color: '#FF9800', fontSize: 11, fontWeight: 'bold' }}>Will record as Payable Debt</Text>
+            )}
+          </View>
           <View style={{ flexDirection: 'row', gap: 6, marginBottom: 12, backgroundColor: 'transparent' }}>
             {PAYMENT_METHODS.map(pm => (
               <TouchableOpacity
@@ -349,7 +386,18 @@ export default function PurchasesScreen() {
               <Text style={styles.cardTitle}>{item.supplier_name || 'Unknown Supplier'}</Text>
               <Text style={styles.cardTotal}>{fmt(item.total_amount)}</Text>
             </View>
-            <Text style={styles.cardSub}>By {item.created_by_name} · {new Date(item.created_at).toLocaleDateString()}{efrisEnabled ? (item.efris_submitted ? '  ✅ EFRIS' : '  ⚠️ Not submitted') : ''}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, backgroundColor: 'transparent', gap: 8 }}>
+              <Text style={styles.cardSub}>By {item.created_by_name} · {new Date(item.created_at).toLocaleDateString()}</Text>
+              <View style={[
+                styles.methodBadge, 
+                item.payment_method === 'credit' ? styles.badgeCredit : styles.badgeCash
+              ]}>
+                <Text style={styles.badgeText}>{item.payment_method === 'credit' ? 'Credit' : 'Cash'}</Text>
+              </View>
+              {efrisEnabled && (
+                <Text style={{ fontSize: 11 }}>{item.efris_submitted ? '✅ EFRIS' : '⚠️ No EFRIS'}</Text>
+              )}
+            </View>
           </TouchableOpacity>
         )}
         ListEmptyComponent={
@@ -398,7 +446,11 @@ const styles = StyleSheet.create({
   cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'transparent' },
   cardTitle: { color: '#fff', fontSize: 15, fontWeight: 'bold' },
   cardTotal: { color: '#4CAF50', fontSize: 15, fontWeight: 'bold' },
-  cardSub: { color: '#555', fontSize: 12, marginTop: 4 },
+  cardSub: { color: '#555', fontSize: 12 },
+  methodBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  badgeCash: { backgroundColor: '#4CAF5020' },
+  badgeCredit: { backgroundColor: '#FF980020' },
+  badgeText: { fontSize: 10, fontWeight: 'bold', color: '#aaa', textTransform: 'uppercase' },
   empty: { alignItems: 'center', paddingTop: 40 },
   emptyText: { color: '#555', fontSize: 16, marginTop: 12 },
 });

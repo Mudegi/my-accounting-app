@@ -64,12 +64,15 @@ export const EXPENSE_ACCOUNT_MAP: Record<string, string> = {
   'Water':         ACC.WATER,
   'Transport':     ACC.TRANSPORT,
   'Communication': ACC.COMMUNICATION,
+  'Internet':      ACC.COMMUNICATION,
   'Salaries':      ACC.SALARIES_WAGES,
   'Supplies':      ACC.SUPPLIES,
   'Repairs':       ACC.REPAIRS,
+  'Maintenance':   ACC.REPAIRS,
   'Insurance':     ACC.INSURANCE,
   'Bank Charges':  ACC.BANK_CHARGES,
   'Taxes':         ACC.TAXES_LICENSES,
+  'Marketing':     ACC.MISC_EXPENSE,
   'Other':         ACC.MISC_EXPENSE,
 };
 
@@ -403,7 +406,11 @@ export async function postExpenseEntry(params: {
 }) {
   const { businessId, branchId, expenseId, amount, category, description, paymentMethod = 'cash', userId } = params;
   const expenseAcct = EXPENSE_ACCOUNT_MAP[category] || ACC.MISC_EXPENSE;
-  const payAcct = PAYMENT_ACCOUNT_MAP[paymentMethod] || ACC.CASH;
+  
+  // DR Expense, CR Payment Asset (Cash/Bank) OR CR Accounts Payable (Credit)
+  const payAcct = paymentMethod === 'credit'
+    ? ACC.ACCOUNTS_PAYABLE
+    : (PAYMENT_ACCOUNT_MAP[paymentMethod] || ACC.CASH);
 
   const lines: JournalLine[] = [
     { accountCode: expenseAcct, debit: amount, description },

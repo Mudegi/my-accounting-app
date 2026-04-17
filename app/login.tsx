@@ -214,7 +214,10 @@ export default function LoginScreen() {
             disabled={loading}
           >
             {loading ? (
-              <ActivityIndicator color="#fff" />
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <ActivityIndicator color="#fff" />
+                {isSignUp && <Text style={[styles.buttonText, { marginLeft: 10 }]}>Creating Account...</Text>}
+              </View>
             ) : (
               <Text style={styles.buttonText}>
                 {isSignUp ? 'Create Account' : 'Sign In'}

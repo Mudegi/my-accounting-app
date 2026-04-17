@@ -27,8 +27,8 @@ type Expense = {
 };
 
 const EXPENSE_CATEGORIES = [
-  'Rent', 'Electricity', 'Water', 'Internet', 'Transport',
-  'Salaries', 'Supplies', 'Marketing', 'Maintenance', 'Other',
+  'Rent', 'Electricity', 'Water', 'Internet', 'Communication', 'Transport',
+  'Salaries', 'Supplies', 'Maintenance', 'Marketing', 'Insurance', 'Bank Charges', 'Taxes', 'Other',
 ];
 
 export default function ExpensesScreen() {
@@ -167,7 +167,12 @@ export default function ExpensesScreen() {
           <TextInput style={styles.input} placeholder="Description (optional)" placeholderTextColor="#555" value={description} onChangeText={setDescription} />
 
           {/* Payment Method */}
-          <Text style={styles.label}>Payment Method</Text>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, backgroundColor: 'transparent' }}>
+            <Text style={[styles.label, { marginBottom: 0 }]}>Payment Method</Text>
+            {expPayMethod === 'credit' && (
+              <Text style={{ color: '#FF9800', fontSize: 11, fontWeight: 'bold' }}>Will record as Payable Debt</Text>
+            )}
+          </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
             <View style={styles.chipRow}>
               {PAYMENT_METHODS.map(pm => (

@@ -349,7 +349,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return { error: setupError };
         }
 
-        // 3. Manually load user data to ensure state is ready BEFORE we release the UI
+        // 3. Ensure the user is signed in.
+        // If supabase.auth.signUp didn't return a session (e.g. email verification is enabled or config differs),
+        // we explicitly sign in here to get a session.
+        if (!authData.session) {
+          const { error: signInError } = await supabase.auth.signInWithPassword({
+            email,
+            password,
+          });
+          if (signInError) {
+            setIsInitializing(false);
+            return { error: signInError };
+          }
+        }
+
+        // 4. Manually load user data to ensure state is ready BEFORE we release the UI
+        // This is important because the onAuthStateChange listener might be slightly delayed
         await loadUserData(authData.user.id);
       }
 
