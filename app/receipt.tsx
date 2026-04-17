@@ -9,6 +9,7 @@ import {
 import { Text, View } from '@/components/Themed';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -36,6 +37,7 @@ const PAYMENT_LABELS: Record<string, string> = {
 export default function ReceiptScreen() {
   const { saleId } = useLocalSearchParams<{ saleId: string }>();
   const { business, currentBranch, profile, fmt: fmtCurrency, currency } = useAuth();
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
@@ -412,7 +414,7 @@ export default function ReceiptScreen() {
       </ScrollView>
 
       {/* Action Buttons */}
-      <View style={s.actionBar}>
+      <View style={[s.actionBar, { paddingBottom: Math.max(insets.bottom, 16) }]}>
         <TouchableOpacity style={[s.actionButton, s.printButton]} onPress={handlePrint} disabled={printing}>
           {printing ? <ActivityIndicator size="small" color="#fff" /> : (
             <><FontAwesome name="print" size={20} color="#fff" /><Text style={s.actionButtonText}>Print</Text></>
@@ -535,7 +537,7 @@ const s = StyleSheet.create({
 
   // ── Bottom buttons ──
   actionBar: {
-    flexDirection: 'row', padding: 12, paddingBottom: 24,
+    flexDirection: 'row', padding: 12,
     backgroundColor: '#16213e', borderTopWidth: 1, borderTopColor: '#0f3460', gap: 10,
   },
   actionButton: {

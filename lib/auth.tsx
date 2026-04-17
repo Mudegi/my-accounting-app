@@ -427,6 +427,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         branches,
         currentBranch,
         loading,
+        isInitializing,
         currency,
         fmt,
         subscriptionStatus,
@@ -435,7 +436,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signUp,
         signOut,
         resetPassword,
-    <AuthContext.Provider value={value}>
+        changePassword,
+        setCurrentBranch,
+        refreshBusiness,
+        reloadUserData,
+        refreshSubscription,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

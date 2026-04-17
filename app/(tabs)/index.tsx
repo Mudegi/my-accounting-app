@@ -209,9 +209,10 @@ export default function SalesScreen() {
       .order('name');
 
     if (data) {
-      // Include all services (regardless of stock) and products with stock > 0
+      // Rule: Service is always available. 
+      // Physical product requires stock > 0 AND a cost price > 0 to be available for sale.
       const results: InventoryItem[] = data
-        .filter((p: any) => p.is_service || (p.inventory[0]?.quantity || 0) > 0)
+        .filter((p: any) => p.is_service || ((p.inventory[0]?.quantity || 0) > 0 && (p.inventory[0]?.avg_cost_price || 0) > 0))
         .map((p: any) => ({
           id: p.id,
           name: p.name,
@@ -253,17 +254,19 @@ export default function SalesScreen() {
       .ilike('name', `%${query}%`);
 
     if (data) {
-      const results: InventoryItem[] = data.map((p: any) => ({
-        id: p.id,
-        name: p.name,
-        barcode: p.barcode,
-        image_url: p.image_url,
-        selling_price: p.inventory[0]?.selling_price || 0,
-        avg_cost_price: p.inventory[0]?.avg_cost_price || 0,
-        stock_quantity: p.inventory[0]?.quantity || 0,
-        tax_category_code: p.tax_category_code || '01',
-        is_service: p.is_service ?? false,
-      }));
+      const results: InventoryItem[] = data
+        .filter((p: any) => p.is_service || ((p.inventory[0]?.quantity || 0) > 0 && (p.inventory[0]?.avg_cost_price || 0) > 0))
+        .map((p: any) => ({
+          id: p.id,
+          name: p.name,
+          barcode: p.barcode,
+          image_url: p.image_url,
+          selling_price: p.inventory[0]?.selling_price || 0,
+          avg_cost_price: p.inventory[0]?.avg_cost_price || 0,
+          stock_quantity: p.inventory[0]?.quantity || 0,
+          tax_category_code: p.tax_category_code || '01',
+          is_service: p.is_service ?? false,
+        }));
       setSearchResults(results);
     }
   };
@@ -285,16 +288,26 @@ export default function SalesScreen() {
 
     if (data) {
       const inv = (data as any).inventory[0];
+      const cost = inv?.avg_cost_price || 0;
+      const isService = (data as any).is_service ?? false;
+
+      // Enforcement: No cost price = No sale (except services)
+      if (!isService && cost <= 0) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        Alert.alert('Sale Blocked', `"${data.name}" cannot be sold because its cost price is not set. Please update the product cost in Inventory first.`);
+        return;
+      }
+
       addToCart({
         id: data.id,
         name: data.name,
         barcode: data.barcode,
         image_url: data.image_url,
         selling_price: inv?.selling_price || 0,
-        avg_cost_price: inv?.avg_cost_price || 0,
+        avg_cost_price: cost,
         stock_quantity: inv?.quantity || 0,
         tax_category_code: (data as any).tax_category_code || '01',
-        is_service: (data as any).is_service ?? false,
+        is_service: isService,
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } else {
@@ -334,6 +347,10 @@ export default function SalesScreen() {
       }
       if (!product.is_service && product.stock_quantity <= 0) {
         Alert.alert('Out of Stock', `"${product.name}" is out of stock.`);
+        return prev;
+      }
+      if (!product.is_service && (product.avg_cost_price || 0) <= 0) {
+        Alert.alert('Incomplete Product', `"${product.name}" cannot be sold because its cost price is missing. Update it in Inventory first.`);
         return prev;
       }
       return [
@@ -518,16 +535,21 @@ export default function SalesScreen() {
           continue;
         }
         
-        goodsRevenue += item.price * item.quantity;
+        goodsRevenue += Number(item.price) * Number(item.quantity);
 
-        const { data: avcoValue } = await supabase.rpc('decrement_inventory', {
+        const { data: avcoValue, error: invError } = await supabase.rpc('decrement_inventory', {
           p_branch_id: currentBranch.id,
           p_product_id: item.product_id,
-          p_quantity: item.quantity,
+          p_quantity: Number(item.quantity),
         });
         
+        if (invError) {
+          console.error(`Inventory decrement failed for ${item.name}:`, invError.message);
+          Alert.alert('System Match Error', `The sale was recorded, but stock for "${item.name}" did not reduce in the system. Ensure the database repair migration has been run.`);
+        }
+
         // Accumulate COGS: retrieved AVCO * quantity sold
-        actualCOGS += (Number(avcoValue) || 0) * item.quantity;
+        actualCOGS += (Number(avcoValue) || 0) * Number(item.quantity);
       }
 
       // Auto-post accounting entry with accurate COGS and revenue split
