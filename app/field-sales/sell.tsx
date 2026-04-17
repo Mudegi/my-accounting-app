@@ -80,6 +80,8 @@ export default function FieldSellScreen() {
   // Payment
   const [payMethod, setPayMethod] = useState('cash');
   const [showCheckout, setShowCheckout] = useState(false);
+  const [stockSearch, setStockSearch] = useState('');
+
 
   // Load active assignments
   const load = useCallback(async () => {
@@ -308,7 +310,6 @@ export default function FieldSellScreen() {
       try {
         const loc = await Location.getCurrentPositionAsync({
           accuracy: Location.Accuracy.High,
-          maximumAge: 10000, // reject cached positions older than 10s
         });
         setGpsLat(loc.coords.latitude);
         setGpsLng(loc.coords.longitude);
@@ -615,13 +616,27 @@ export default function FieldSellScreen() {
       )}
 
       {/* Available Stock to Sell */}
-      <Text style={[styles.sectionTitle, { marginTop: cart.length > 0 ? 12 : 0 }]}>YOUR ASSIGNED STOCK</Text>
+      <View style={styles.stockHeader}>
+        <Text style={styles.sectionTitle}>YOUR ASSIGNED STOCK</Text>
+        <View style={styles.stockSearchRow}>
+          <FontAwesome name="search" size={14} color="#666" style={{ marginRight: 8 }} />
+          <TextInput
+            style={styles.stockSearchInput}
+            placeholder="Search stock..."
+            placeholderTextColor="#666"
+            value={stockSearch}
+            onChangeText={setStockSearch}
+          />
+        </View>
+      </View>
 
       {loading ? (
         <ActivityIndicator color="#e94560" style={{ marginTop: 40 }} />
       ) : (
         <FlatList
-          data={assignments}
+          data={assignments.filter(a => 
+            a.product_name?.toLowerCase().includes(stockSearch.toLowerCase())
+          )}
           keyExtractor={a => a.id}
           renderItem={({ item }) => {
             const available = getAvailableQty(item);
@@ -799,7 +814,32 @@ export default function FieldSellScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#1a1a2e', padding: 16 },
   gpsBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#16213e', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, marginBottom: 12 },
-  sectionTitle: { color: '#888', fontSize: 12, fontWeight: 'bold', letterSpacing: 1, marginBottom: 8 },
+  sectionTitle: { color: '#888', fontSize: 13, fontWeight: 'bold', letterSpacing: 1, marginBottom: 0 },
+  stockHeader: { 
+    marginTop: 12, 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center',
+    marginBottom: 8,
+    backgroundColor: 'transparent',
+  },
+  stockSearchRow: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#16213e',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    marginLeft: 12,
+    borderWidth: 1,
+    borderColor: '#0f3460',
+  },
+  stockSearchInput: {
+    flex: 1,
+    color: '#fff',
+    fontSize: 14,
+    paddingVertical: 6,
+  },
   cartSection: { backgroundColor: '#0f3460', borderRadius: 16, padding: 14, marginBottom: 14 },
   cartCard: { backgroundColor: '#16213e', borderRadius: 12, padding: 12, marginBottom: 8 },
   cartItemRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'transparent' },

@@ -94,8 +94,8 @@ export default function AssignStockScreen() {
   const handleAssign = async () => {
     if (!selectedUser) { Alert.alert('Error', 'Select a user'); return; }
     if (!selectedProduct) { Alert.alert('Error', 'Select a product'); return; }
-    const qtyNum = parseInt(qty);
-    if (!qtyNum || qtyNum < 1) { Alert.alert('Error', 'Enter a valid quantity'); return; }
+    const qtyNum = parseFloat(qty);
+    if (!qtyNum || qtyNum <= 0) { Alert.alert('Error', 'Enter a valid quantity'); return; }
     if (!business || !profile) return;
 
     setSaving(true);
@@ -321,7 +321,7 @@ export default function AssignStockScreen() {
                 placeholderTextColor="#555"
                 value={qty}
                 onChangeText={setQty}
-                keyboardType="numeric"
+                keyboardType="decimal-pad"
               />
 
               <Text style={styles.label}>Notes (optional)</Text>

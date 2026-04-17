@@ -126,16 +126,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         } catch {}
         touchActivity();
+        
         // Heartbeat to keep session alive + check access
-        const hb = await heartbeatSession();
-        if (hb && !hb.allowed) {
-          const { Alert } = require('react-native');
-          Alert.alert(
-            'Access Revoked',
-            hb.reason || 'Your access has been revoked. Contact your administrator.',
-            [{ text: 'OK', onPress: () => supabase.auth.signOut() }]
-          );
-          return;
+        // IMPORTANT: Only heartbeat if we have a profile. 
+        // If we don't have a profile yet, it means we are still signing in, 
+        // and calling heartbeat too early causes an "Account not found" error.
+        if (session && profile) {
+          const hb = await heartbeatSession();
+          if (hb && !hb.allowed) {
+            const { Alert } = require('react-native');
+            Alert.alert(
+              'Access Revoked',
+              hb.reason || 'Your access has been revoked. Contact your administrator.',
+              [{ text: 'OK', onPress: () => supabase.auth.signOut() }]
+            );
+            return;
+          }
         }
       } else if (nextState.match(/inactive|background/)) {
         // Going to background — stamp the time
@@ -146,7 +152,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const sub = AppState.addEventListener('change', handleAppStateChange);
     return () => sub.remove();
-  }, [session]);
+  }, [session, profile]);
 
   useEffect(() => {
     // Get initial session — fast path, no network call
@@ -186,20 +192,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const loadUserData = async (userId: string) => {
     try {
-      // Load profile
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
+      // Load profile (retry a few times if not found, useful for new sign-ups)
+      let profileData = null;
+      let profileError = null;
+      let retries = 0;
+      const MAX_RETRIES = 5;
 
-      if (profileError) {
-        console.error('Profile load error:', profileError.message, profileError.code);
-        return;
+      while (retries < MAX_RETRIES) {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', userId)
+          .maybeSingle(); // Better than .single() because we expect it might be missing
+        
+        if (data) {
+          profileData = data;
+          break;
+        }
+        
+        if (error && error.code !== 'PGRST116') { // PGRST116 is just "no rows found"
+          console.error('Profile query error:', error.message);
+        }
+        
+        console.log(`Waiting for profile... attempt ${retries + 1}`);
+        await new Promise(resolve => setTimeout(resolve, 800 * (retries + 1))); // Incremental backoff
+        retries++;
       }
 
       if (!profileData) {
-        console.error('No profile data returned for user:', userId);
+        console.error('No profile record found after retries for user:', userId);
         return;
       }
 
@@ -308,43 +329,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (authError) return { error: authError };
 
     if (authData.user) {
-      // 2. Create business
-      const { data: businessData, error: bizError } = await supabase
-        .from('businesses')
-        .insert({ name: businessName })
-        .select()
-        .single();
+      // 2. Setup the entire account at once (Atomic RPC)
+      // This creates Business, Branch, Profile, and seeds Chart of Accounts in one go (<1s)
+      const { error: setupError } = await supabase.rpc('setup_new_account', {
+        p_user_id: authData.user.id,
+        p_full_name: fullName,
+        p_business_name: businessName,
+      });
 
-      if (bizError) return { error: bizError };
-
-      // 3. Create a default "Main" branch
-      const { data: branchData, error: branchError } = await supabase
-        .from('branches')
-        .insert({
-          business_id: businessData.id,
-          name: 'Main Branch',
-          location: '',
-        })
-        .select()
-        .single();
-
-      if (branchError) return { error: branchError };
-
-      // 4. Create profile as admin
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .insert({
-          id: authData.user.id,
-          business_id: businessData.id,
-          branch_id: branchData.id,
-          full_name: fullName,
-          role: 'admin',
-        });
-
-      if (profileError) return { error: profileError };
-
-      // 5. Seed chart of accounts
-      await supabase.rpc('seed_chart_of_accounts', { p_business_id: businessData.id });
+      if (setupError) return { error: setupError };
     }
 
     return { error: null };

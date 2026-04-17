@@ -160,9 +160,17 @@ export default function ProductFormScreen() {
       Alert.alert('Error', 'Please enter a valid selling price');
       return;
     }
-    if (!business || !currentBranch) return;
+    if (!business || !currentBranch) {
+      Alert.alert(
+        'Account Still Setting Up',
+        'Your business or branch data is still being loaded. Please wait a moment for the initialization to complete.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
 
     setSaving(true);
+    setEfrisRegistering(false); // Ensure only this button's spinner shows
     try {
       if (isNew) {
         // Create product
@@ -197,7 +205,7 @@ export default function ProductFormScreen() {
           .insert({
             branch_id: currentBranch.id,
             product_id: product.id,
-            quantity: parseInt(quantity) || 0,
+            quantity: parseFloat(quantity) || 0,
             avg_cost_price: parseFloat(costPrice) || 0,
             selling_price: parseFloat(sellingPrice),
             reorder_level: parseInt(reorderLevel) || 5,
@@ -232,10 +240,12 @@ export default function ProductFormScreen() {
 
         if (productError) throw productError;
 
-        // Update inventory
+        // Update inventory (manual overrides)
         const { error: invError } = await supabase
           .from('inventory')
           .update({
+            quantity: parseFloat(quantity) || 0,
+            avg_cost_price: parseFloat(costPrice) || 0,
             selling_price: parseFloat(sellingPrice),
             reorder_level: parseInt(reorderLevel) || 5,
           })
@@ -515,29 +525,30 @@ export default function ProductFormScreen() {
             />
           </View>
 
-          {/* Barcode */}
-          <View style={styles.field}>
-            <Text style={styles.label}>Barcode / QR Code (Optional)</Text>
-            <Text style={styles.hint}>Leave empty for items without barcodes — you can sell them by name search</Text>
-            <View style={styles.inputRow}>
-              <TextInput
-                style={[styles.input, styles.inputFlex]}
-                placeholder="Scan or type barcode (or leave empty)"
-                placeholderTextColor="#555"
-                value={barcode}
-                onChangeText={setBarcode}
-              />
-              <TouchableOpacity
-                style={styles.scanButton}
-                onPress={() => {
-                  if (!permission?.granted) requestPermission();
-                  else setScanning(true);
-                }}
-              >
-                <FontAwesome name="camera" size={20} color="#fff" />
-              </TouchableOpacity>
+          {!isService && (
+            <View style={styles.field}>
+              <Text style={styles.label}>Barcode / QR Code (Optional)</Text>
+              <Text style={styles.hint}>Leave empty for items without barcodes — you can sell them by name search</Text>
+              <View style={styles.inputRow}>
+                <TextInput
+                  style={[styles.input, styles.inputFlex]}
+                  placeholder="Scan or type barcode (or leave empty)"
+                  placeholderTextColor="#555"
+                  value={barcode}
+                  onChangeText={setBarcode}
+                />
+                <TouchableOpacity
+                  style={styles.scanButton}
+                  onPress={() => {
+                    if (!permission?.granted) requestPermission();
+                    else setScanning(true);
+                  }}
+                >
+                  <FontAwesome name="camera" size={20} color="#fff" />
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
+          )}
 
           {/* SKU / Commodity Code */}
           <View style={styles.field}>
@@ -605,46 +616,49 @@ export default function ProductFormScreen() {
             />
           </View>
 
-          {/* Cost Price */}
-          <View style={styles.field}>
-            <Text style={styles.label}>Cost Price ({currency.symbol})</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="0"
-              placeholderTextColor="#555"
-              value={costPrice}
-              onChangeText={setCostPrice}
-              keyboardType="numeric"
-            />
-          </View>
-
-          {/* Initial Quantity (new products only) */}
-          {isNew && (
+          {!isService && (
             <View style={styles.field}>
-              <Text style={styles.label}>Opening Stock Quantity</Text>
+              <Text style={styles.label}>Cost Price ({currency.symbol})</Text>
+              {!isNew && <Text style={styles.hint}>Administrative Override: Manually changing cost will not post a journal entry.</Text>}
+              <TextInput
+                style={styles.input}
+                placeholder="0"
+                placeholderTextColor="#555"
+                value={costPrice}
+                onChangeText={setCostPrice}
+                keyboardType="numeric"
+              />
+            </View>
+          )}
+
+          {!isService && (
+            <View style={styles.field}>
+              <Text style={styles.label}>{isNew ? 'Opening Stock Quantity' : 'Current Stock Quantity'}</Text>
+              {!isNew && <Text style={styles.hint}>Administrative Override: Manually changing quantity will not post a journal entry. Use Stock Purchases for normal inventory increases.</Text>}
               <TextInput
                 style={styles.input}
                 placeholder="0"
                 placeholderTextColor="#555"
                 value={quantity}
                 onChangeText={setQuantity}
-                keyboardType="numeric"
+                keyboardType="decimal-pad"
               />
             </View>
           )}
 
-          {/* Reorder Level */}
-          <View style={styles.field}>
-            <Text style={styles.label}>Low Stock Alert (min qty)</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="5"
-              placeholderTextColor="#555"
-              value={reorderLevel}
-              onChangeText={setReorderLevel}
-              keyboardType="numeric"
-            />
-          </View>
+          {!isService && (
+            <View style={styles.field}>
+              <Text style={styles.label}>Low Stock Alert (min qty)</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="5"
+                placeholderTextColor="#555"
+                value={reorderLevel}
+                onChangeText={setReorderLevel}
+                keyboardType="decimal-pad"
+              />
+            </View>
+          )}
 
           {/* Description */}
           <View style={styles.field}>
@@ -668,7 +682,7 @@ export default function ProductFormScreen() {
                 onPress={handleSave}
                 disabled={saving}
               >
-                {saving ? <ActivityIndicator color="#fff" /> : (
+                {(saving && !efrisRegistering) ? <ActivityIndicator color="#fff" /> : (
                   <Text style={styles.saveButtonText}>{isNew ? '+ Add' : '💾 Save Changes'}</Text>
                 )}
               </TouchableOpacity>
@@ -677,8 +691,8 @@ export default function ProductFormScreen() {
                 onPress={handleSaveAndRegister}
                 disabled={saving || efrisRegistering}
               >
-                {(saving || efrisRegistering) ? <ActivityIndicator color="#fff" size="small" /> : (
-                  <Text style={styles.efrisRegisterText}>Register with EFRIS</Text>
+                {efrisRegistering ? <ActivityIndicator color="#fff" size="small" /> : (
+                  <Text style={styles.efrisRegisterText}>Add & Register With EFRIS</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -688,14 +702,14 @@ export default function ProductFormScreen() {
               onPress={handleSave}
               disabled={saving}
             >
-              {saving ? <ActivityIndicator color="#fff" /> : (
+              {(saving && !efrisRegistering) ? <ActivityIndicator color="#fff" /> : (
                 <Text style={styles.saveButtonText}>{isNew ? '+ Add' : '💾 Save Changes'}</Text>
               )}
             </TouchableOpacity>
           )}
 
-          {/* EFRIS Section (only when enabled) */}
-          {efrisEnabled && (
+          {/* EFRIS Section (only when enabled OR when product has EFRIS data) */}
+          {(efrisEnabled || efrisProductCode) && (
             <>
               <Text style={[styles.groupLabel, { color: '#7C3AED' }]}>🇺🇬 EFRIS TAX REGISTRATION</Text>
 
@@ -720,6 +734,7 @@ export default function ProductFormScreen() {
                         key={tc.code}
                         style={[styles.chip, taxCategoryCode === tc.code && styles.efrisChipActive]}
                         onPress={() => setTaxCategoryCode(tc.code)}
+                        disabled={!efrisEnabled}
                       >
                         <Text style={[styles.chipText, taxCategoryCode === tc.code && styles.chipTextActive]}>{tc.label}</Text>
                       </TouchableOpacity>
@@ -728,8 +743,8 @@ export default function ProductFormScreen() {
                 </ScrollView>
               </View>
 
-              {/* Register Button is now integrated into the Save & Register button above */}
-              {efrisProductCode && !isNew && (
+              {/* Register Button - hide if integration is off */}
+              {efrisEnabled && efrisProductCode && !isNew && (
                 <TouchableOpacity
                   style={[styles.efrisRegisterBtn, { marginTop: 8 }, efrisRegistering && { opacity: 0.6 }]}
                   onPress={handleEfrisRegister}

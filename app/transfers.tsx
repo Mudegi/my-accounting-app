@@ -158,6 +158,16 @@ export default function TransfersScreen() {
     );
   };
 
+  const setCartQty = (productId: string, value: string) => {
+    const qty = parseFloat(value) || 0;
+    setCart(prev =>
+      prev.map(c => c.product_id === productId
+        ? { ...c, quantity: Math.max(0, Math.min(c.max_qty, qty)) }
+        : c
+      )
+    );
+  };
+
   const removeFromCart = (productId: string) => {
     setCart(prev => prev.filter(c => c.product_id !== productId));
   };
@@ -504,7 +514,13 @@ export default function TransfersScreen() {
                         <TouchableOpacity style={styles.qtyBtn} onPress={() => updateCartQty(item.product_id, -1)}>
                           <FontAwesome name="minus" size={10} color="#fff" />
                         </TouchableOpacity>
-                        <Text style={styles.qtyText}>{item.quantity}</Text>
+                        <TextInput
+                          style={[styles.qtyText, { backgroundColor: '#1a1a2e', borderRadius: 4, minWidth: 40, textAlign: 'center' }]}
+                          value={item.quantity.toString()}
+                          onChangeText={(v) => setCartQty(item.product_id, v)}
+                          keyboardType="decimal-pad"
+                          selectTextOnFocus
+                        />
                         <TouchableOpacity
                           style={[styles.qtyBtn, { backgroundColor: '#4CAF50' }]}
                           onPress={() => updateCartQty(item.product_id, 1)}

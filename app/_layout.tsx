@@ -52,7 +52,7 @@ export default function RootLayout() {
 }
 
 function RootLayoutNav() {
-  const { session, user, loading, business, subscriptionStatus, signOut, reloadUserData, changePassword } = useAuth();
+  const { session, user, loading, profile, business, subscriptionStatus, signOut, reloadUserData, changePassword } = useAuth();
   const segments = useSegments();
   const router = useRouter();
   const [loadingTooLong, setLoadingTooLong] = useState(false);
@@ -129,20 +129,23 @@ function RootLayoutNav() {
     }
   }, [session, loading, segments, business]);
 
-  if (loading) {
+  // Show loading while auth is initializing OR while session exists but profile isn't ready yet
+  const isSyncing = session && !profile;
+  if (loading || isSyncing) {
+    const loadingText = isSyncing ? 'Finalizing your account setup...' : 'Loading YourBooks...';
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#1a1a2e', paddingHorizontal: 32 }}>
         <ActivityIndicator size="large" color="#e94560" />
         {loadingTooLong && (
           <>
             <Text style={{ color: '#aaa', fontSize: 14, textAlign: 'center', marginTop: 20, lineHeight: 20 }}>
-              Loading is taking longer than usual.{'\n'}Please check your internet connection.
+              {isSyncing ? "We're having trouble syncing your profile data." : "Loading is taking longer than usual."}{'\n'}Please check your internet connection.
             </Text>
             <TouchableOpacity
               onPress={() => { setLoadingTooLong(false); reloadUserData(); }}
               style={{ marginTop: 16, backgroundColor: '#e94560', borderRadius: 12, paddingHorizontal: 24, paddingVertical: 12 }}
             >
-              <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 15 }}>Retry</Text>
+              <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 15 }}>Retry Sync</Text>
             </TouchableOpacity>
             <TouchableOpacity
               onPress={() => signOut()}

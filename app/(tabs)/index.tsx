@@ -382,6 +382,20 @@ export default function SalesScreen() {
     });
   };
 
+  const setCartQuantity = (id: string, value: string) => {
+    const qty = parseFloat(value) || 0;
+    setCart((prev) => {
+      const target = prev.find((item) => item.id === id);
+      if (target && qty > target.stock_quantity) {
+        Alert.alert('Stock Limit', `Only ${target.stock_quantity} unit(s) of "${target.name}" available in stock.`);
+        return prev.map(item => item.id === id ? { ...item, quantity: item.stock_quantity } : item);
+      }
+      return prev.map((item) =>
+        item.id === id ? { ...item, quantity: Math.max(0, qty) } : item
+      );
+    });
+  };
+
   // Update item tax rate
   const updateItemTax = (id: string, code: string, rate: number) => {
     setCart((prev) =>
@@ -495,8 +509,17 @@ export default function SalesScreen() {
       // Decrement inventory and calculate true COGS using AVCO returned from DB
       // Services don't have stock — skip decrement for them
       let actualCOGS = 0;
+      let goodsRevenue = 0;
+      let serviceRevenue = 0;
+
       for (const item of cart) {
-        if (item.is_service) continue;
+        if (item.is_service) {
+          serviceRevenue += item.price * item.quantity;
+          continue;
+        }
+        
+        goodsRevenue += item.price * item.quantity;
+
         const { data: avcoValue } = await supabase.rpc('decrement_inventory', {
           p_branch_id: currentBranch.id,
           p_product_id: item.product_id,
@@ -507,7 +530,7 @@ export default function SalesScreen() {
         actualCOGS += (Number(avcoValue) || 0) * item.quantity;
       }
 
-      // Auto-post accounting entry with accurate COGS
+      // Auto-post accounting entry with accurate COGS and revenue split
       postSaleEntry({
         businessId: business.id,
         branchId: currentBranch.id,
@@ -516,6 +539,8 @@ export default function SalesScreen() {
         taxAmount: Math.round(taxAmount),
         totalAmount: Math.round(totalAmount),
         costOfGoods: actualCOGS,
+        goodsRevenue,
+        serviceRevenue,
         discountAmount: discountAmount,
         paymentMethod: salePayMethod,
         userId: profile.id,
@@ -861,7 +886,13 @@ export default function SalesScreen() {
                       <TouchableOpacity style={styles.qtyButton} onPress={() => updateQuantity(item.id, -1)}>
                         <Text style={styles.qtyButtonText}>−</Text>
                       </TouchableOpacity>
-                      <Text style={styles.qtyText}>{item.quantity}</Text>
+                      <TextInput
+                        style={[styles.qtyText, { backgroundColor: '#0f3460', borderRadius: 4, minWidth: 40, textAlign: 'center' }]}
+                        value={item.quantity.toString()}
+                        onChangeText={(v) => setCartQuantity(item.id, v)}
+                        keyboardType="decimal-pad"
+                        selectTextOnFocus
+                      />
                       <TouchableOpacity style={styles.qtyButton} onPress={() => updateQuantity(item.id, 1)}>
                         <Text style={styles.qtyButtonText}>+</Text>
                       </TouchableOpacity>

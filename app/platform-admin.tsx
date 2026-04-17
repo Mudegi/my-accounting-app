@@ -874,6 +874,14 @@ export default function PlatformAdminScreen() {
               />
             </View>
 
+            {!efrisEnabled && (
+              <View style={{ backgroundColor: '#2d6a4f20', borderRadius: 8, padding: 10, marginBottom: 16 }}>
+                <Text style={{ color: '#4CAF50', fontSize: 11, fontStyle: 'italic', lineHeight: 16 }}>
+                  Note: Disabling EFRIS will not remove existing imported products or their tax codes. All previous records remain accessible for internal operations.
+                </Text>
+              </View>
+            )}
+
             {efrisEnabled && (
               <>
                 {/* API Key */}

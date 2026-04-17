@@ -149,9 +149,9 @@ export default function SettingsScreen() {
           </Text>
         </View>
         <View style={styles.profileInfo}>
-          <Text style={styles.profileName}>{profile?.full_name || 'Loading...'}</Text>
-          <Text style={styles.profileRole}>{profile?.role?.toUpperCase() || ''}</Text>
-          <Text style={styles.businessName}>{business?.name ? `🏢 ${business.name}` : ''}</Text>
+          <Text style={styles.profileName}>{profile?.full_name || 'Personal Account'}</Text>
+          <Text style={styles.profileRole}>{profile?.role?.toUpperCase() || 'Synchronizing...'}</Text>
+          <Text style={styles.businessName}>{business?.name ? `🏢 ${business.name}` : 'Finalizing business setup...'}</Text>
         </View>
         {!profile && (
           <TouchableOpacity

@@ -68,7 +68,12 @@ export default function PurchasesScreen() {
 
   const loadProducts = async () => {
     if (!business) return;
-    const { data } = await supabase.from('products').select('id, name, efris_product_code, is_service').eq('business_id', business.id).order('name');
+    const { data } = await supabase
+      .from('products')
+      .select('id, name, efris_product_code, is_service')
+      .eq('business_id', business.id)
+      .eq('is_service', false) // Filter out services
+      .order('name');
     if (data) setProducts(data);
   };
 
@@ -93,9 +98,9 @@ export default function PurchasesScreen() {
 
   const handleSave = async (withEfris: boolean = false) => {
     if (!selectedProduct) { Alert.alert('Error', 'Select a product'); return; }
-    const qtyNum = parseInt(qty);
+    const qtyNum = parseFloat(qty);
     const cost = parseFloat(costPrice);
-    if (!qtyNum || qtyNum < 1) { Alert.alert('Error', 'Enter a valid quantity'); return; }
+    if (!qtyNum || qtyNum <= 0) { Alert.alert('Error', 'Enter a valid quantity'); return; }
     if (isNaN(cost) || cost < 0) { Alert.alert('Error', 'Enter a valid cost price'); return; }
     if (!business || !currentBranch || !profile) return;
 
@@ -291,7 +296,7 @@ export default function PurchasesScreen() {
             </View>
           )}
 
-          <TextInput style={styles.input} placeholder="Quantity Received" placeholderTextColor="#555" value={qty} onChangeText={setQty} keyboardType="numeric" />
+          <TextInput style={styles.input} placeholder="Quantity Received" placeholderTextColor="#555" value={qty} onChangeText={setQty} keyboardType="decimal-pad" />
           <TextInput style={styles.input} placeholder={`Cost Price per Unit (${currency.symbol})`} placeholderTextColor="#555" value={costPrice} onChangeText={setCostPrice} keyboardType="numeric" />
           <TextInput style={styles.input} placeholder={`VAT Amount on Purchase (${currency.symbol}, optional)`} placeholderTextColor="#555" value={vatAmount} onChangeText={setVatAmount} keyboardType="numeric" />
 
@@ -310,7 +315,7 @@ export default function PurchasesScreen() {
           </View>
 
           {qty && costPrice && !isNaN(parseFloat(costPrice)) && (
-            <Text style={styles.totalPreview}>Total: {fmt(parseInt(qty || '0') * parseFloat(costPrice || '0'))}</Text>
+            <Text style={styles.totalPreview}>Total: {fmt(parseFloat(qty || '0') * parseFloat(costPrice || '0'))}</Text>
           )}
 
           <View style={styles.formButtons}>

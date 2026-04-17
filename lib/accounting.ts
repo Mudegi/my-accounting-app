@@ -32,12 +32,14 @@ export const ACC = {
 
   // Revenue (4xxx)
   SALES_REVENUE:      '4000',
+  SERVICE_REVENUE:    '4010',
   SALES_DISCOUNT:     '4100',  // Contra-revenue
   SALES_RETURNS:      '4200',  // Contra-revenue
   OTHER_INCOME:       '4300',
 
   // Expenses (5xxx-6xxx)
   COGS:               '5000',
+  COST_OF_SERVICES:   '5010',
   PURCHASE_EXPENSE:   '5100',
   RENT:               '6000',
   ELECTRICITY:        '6010',
@@ -210,18 +212,29 @@ export async function postSaleEntry(params: {
   taxAmount: number;
   totalAmount: number;
   costOfGoods: number;
+  goodsRevenue?: number;
+  serviceRevenue?: number;
+  costOfServices?: number;
   discountAmount?: number;
   paymentMethod: string;
   userId?: string;
 }) {
   const { businessId, branchId, saleId, subtotal, taxAmount, totalAmount,
-          costOfGoods, discountAmount = 0, paymentMethod, userId } = params;
+          costOfGoods, goodsRevenue, serviceRevenue, costOfServices = 0,
+          discountAmount = 0, paymentMethod, userId } = params;
   const payAcct = PAYMENT_ACCOUNT_MAP[paymentMethod] || ACC.CASH;
 
   const lines: JournalLine[] = [
     { accountCode: payAcct, debit: totalAmount, description: 'Payment received' },
-    { accountCode: ACC.SALES_REVENUE, credit: subtotal, description: 'Sales revenue (gross)' },
   ];
+
+  // Split revenue if provided, otherwise default to Sales Revenue
+  if (serviceRevenue !== undefined && goodsRevenue !== undefined) {
+    if (goodsRevenue > 0) lines.push({ accountCode: ACC.SALES_REVENUE, credit: goodsRevenue, description: 'Sales revenue (products)' });
+    if (serviceRevenue > 0) lines.push({ accountCode: ACC.SERVICE_REVENUE, credit: serviceRevenue, description: 'Service revenue' });
+  } else {
+    lines.push({ accountCode: ACC.SALES_REVENUE, credit: subtotal, description: 'Sales revenue (gross)' });
+  }
 
   if (taxAmount > 0) {
     lines.push({ accountCode: ACC.VAT_PAYABLE, credit: taxAmount, description: 'Output VAT collected' });
@@ -234,6 +247,10 @@ export async function postSaleEntry(params: {
   if (costOfGoods > 0) {
     lines.push({ accountCode: ACC.COGS, debit: costOfGoods, description: 'Cost of goods sold' });
     lines.push({ accountCode: ACC.INVENTORY, credit: costOfGoods, description: 'Inventory reduced' });
+  }
+
+  if (costOfServices > 0) {
+    lines.push({ accountCode: ACC.COST_OF_SERVICES, debit: costOfServices, description: 'Cost of services provided' });
   }
 
   return postJournalEntry(businessId, branchId, 'sale', saleId, `Sale #${saleId.slice(0, 8)}`, lines, userId);
@@ -524,11 +541,13 @@ export function computePnL(trialBalance: AccountBalance[]) {
 
   trialBalance.forEach(a => {
     switch (a.code) {
-      case ACC.SALES_REVENUE: grossRevenue = a.balance; break;
+      case ACC.SALES_REVENUE: grossRevenue += a.balance; break;
+      case ACC.SERVICE_REVENUE: grossRevenue += a.balance; break; // Pool both for top-level gross
       case ACC.SALES_DISCOUNT: salesDiscount = a.balance; break;
       case ACC.SALES_RETURNS: salesReturns = a.balance; break;
       case ACC.OTHER_INCOME: otherIncome = a.balance; break;
-      case ACC.COGS: cogs = a.balance; break;
+      case ACC.COGS: cogs += a.balance; break;
+      case ACC.COST_OF_SERVICES: cogs += a.balance; break; // Pool both for gross profit calculation
       default:
         if (a.account_type === 'expense' && a.code !== ACC.COGS && a.balance !== 0) {
           operatingExpenses.push({ name: a.name, amount: a.balance });
