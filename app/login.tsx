@@ -138,11 +138,9 @@ export default function LoginScreen() {
     const { error } = await signUp(email, password, fullName, businessName);
     if (error) {
       Alert.alert('Sign Up Failed', error.message);
-    } else {
-      Alert.alert('Success', 'Account created! You can now sign in.');
-      setIsSignUp(false);
+      setLoading(false);
     }
-    setLoading(false);
+    // Success is handled by the sequential flow in useAuth which will trigger a root layout redirect
   };
 
   return (

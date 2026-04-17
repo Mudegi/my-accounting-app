@@ -52,6 +52,7 @@ type AuthContextType = {
   branches: Branch[];
   currentBranch: Branch | null;
   loading: boolean;
+  isInitializing: boolean;
   currency: Currency;
   fmt: (amount: number) => string;
   subscriptionStatus: SubscriptionStatus | null;
@@ -75,6 +76,7 @@ const AuthContext = createContext<AuthContextType>({
   branches: [],
   currentBranch: null,
   loading: true,
+  isInitializing: false,
   currency: { code: 'UGX', name: 'Ugandan Shilling', symbol: 'UGX', decimal_places: 0 },
   fmt: (a: number) => `UGX ${Math.round(a).toLocaleString()}`,
   subscriptionStatus: null,
@@ -100,6 +102,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [branches, setBranches] = useState<Branch[]>([]);
   const [currentBranch, setCurrentBranch] = useState<Branch | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isInitializing, setIsInitializing] = useState(false);
   const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatus | null>(null);
   const initialLoadDone = React.useRef(false);
   const appState = useRef(AppState.currentState);
@@ -320,27 +323,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signUp = async (email: string, password: string, fullName: string, businessName: string) => {
-    // 1. Create the auth user
-    const { data: authData, error: authError } = await supabase.auth.signUp({
-      email,
-      password,
-    });
-
-    if (authError) return { error: authError };
-
-    if (authData.user) {
-      // 2. Setup the entire account at once (Atomic RPC)
-      // This creates Business, Branch, Profile, and seeds Chart of Accounts in one go (<1s)
-      const { error: setupError } = await supabase.rpc('setup_new_account', {
-        p_user_id: authData.user.id,
-        p_full_name: fullName,
-        p_business_name: businessName,
+    try {
+      setIsInitializing(true);
+      // 1. Create the auth user
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email,
+        password,
       });
 
-      if (setupError) return { error: setupError };
-    }
+      if (authError) {
+        setIsInitializing(false);
+        return { error: authError };
+      }
 
-    return { error: null };
+      if (authData.user) {
+        // 2. Setup the entire account at once (Atomic RPC)
+        const { error: setupError } = await supabase.rpc('setup_new_account', {
+          p_user_id: authData.user.id,
+          p_full_name: fullName,
+          p_business_name: businessName,
+        });
+
+        if (setupError) {
+          setIsInitializing(false);
+          return { error: setupError };
+        }
+
+        // 3. Manually load user data to ensure state is ready BEFORE we release the UI
+        await loadUserData(authData.user.id);
+      }
+
+      setIsInitializing(false);
+      return { error: null };
+    } catch (e: any) {
+      console.error('Signup error:', e);
+      setIsInitializing(false);
+      return { error: { message: e.message || 'Signup failed' } };
+    }
   };
 
   const signOut = async () => {
@@ -416,13 +435,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signUp,
         signOut,
         resetPassword,
-        changePassword,
-        setCurrentBranch,
-        refreshBusiness,
-        reloadUserData,
-        refreshSubscription,
-      }}
-    >
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );

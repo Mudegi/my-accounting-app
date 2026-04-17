@@ -52,7 +52,7 @@ export default function RootLayout() {
 }
 
 function RootLayoutNav() {
-  const { session, user, loading, profile, business, subscriptionStatus, signOut, reloadUserData, changePassword } = useAuth();
+  const { session, user, loading, isInitializing, profile, business, subscriptionStatus, signOut, reloadUserData, changePassword } = useAuth();
   const segments = useSegments();
   const router = useRouter();
   const [loadingTooLong, setLoadingTooLong] = useState(false);
@@ -131,8 +131,12 @@ function RootLayoutNav() {
 
   // Show loading while auth is initializing OR while session exists but profile isn't ready yet
   const isSyncing = session && !profile;
-  if (loading || isSyncing) {
-    const loadingText = isSyncing ? 'Finalizing your account setup...' : 'Loading YourBooks...';
+  const showSpinner = loading || isInitializing || isSyncing;
+
+  if (showSpinner) {
+    let loadingText = 'Loading YourBooks...';
+    if (isInitializing) loadingText = 'Creating your business account...';
+    else if (isSyncing) loadingText = 'Finalizing your account setup...';
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#1a1a2e', paddingHorizontal: 32 }}>
         <ActivityIndicator size="large" color="#e94560" />

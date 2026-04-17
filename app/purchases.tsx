@@ -134,13 +134,17 @@ export default function PurchasesScreen() {
     });
 
     // Add stock to inventory with proper AVCO (weighted average cost)
-    // The RPC atomically: upserts inventory row, computes new avg_cost_price
-    await supabase.rpc('increment_inventory', {
+    const { error: invError } = await supabase.rpc('increment_inventory', {
       p_branch_id: currentBranch.id,
       p_product_id: selectedProduct,
       p_quantity: qtyNum,
       p_unit_cost: cost,
     });
+
+    if (invError) {
+      console.error('Inventory update error:', invError);
+      Alert.alert('Partially Saved', 'Purchase recorded but stock level failed to update. Please check inventory manually.');
+    }
 
     // Auto-post accounting entry
     const vatNum = parseFloat(vatAmount) || 0;
@@ -238,12 +242,14 @@ export default function PurchasesScreen() {
                 placeholderTextColor="#555"
                 value={supplierSearch || supplier}
                 onChangeText={(text) => { setSupplierSearch(text); setSupplier(text); }}
+                onFocus={() => { if (!supplierSearch) setSupplierSearch(' '); setTimeout(() => setSupplierSearch(''), 100); }}
               />
-              {supplierSearch.trim() && filteredSuppliers.length > 0 && (
-                <View style={{ backgroundColor: '#0f3460', borderRadius: 10, marginBottom: 10, maxHeight: 120 }}>
+              {((supplierSearch.trim().length > 0) || (suppliersList.length > 0 && supplierSearch === '')) && filteredSuppliers.length > 0 && !selectedSupplierId && (
+                <View style={{ backgroundColor: '#0f3460', borderRadius: 10, marginBottom: 10, maxHeight: 150, borderWidth: 1, borderColor: '#e94560' }}>
                   {filteredSuppliers.slice(0, 5).map(s => (
-                    <TouchableOpacity key={s.id} onPress={() => selectSupplier(s)} style={{ padding: 10, borderBottomWidth: 1, borderBottomColor: '#1a1a2e' }}>
-                      <Text style={{ color: '#fff', fontSize: 14 }}>{s.name}{s.tin ? ` (TIN: ${s.tin})` : ''}</Text>
+                    <TouchableOpacity key={s.id} onPress={() => selectSupplier(s)} style={{ padding: 12, borderBottomWidth: 1, borderBottomColor: '#1a1a2e' }}>
+                      <Text style={{ color: '#fff', fontSize: 14, fontWeight: 'bold' }}>{s.name}</Text>
+                      {s.tin ? <Text style={{ color: '#aaa', fontSize: 11 }}>TIN: {s.tin}</Text> : null}
                     </TouchableOpacity>
                   ))}
                 </View>
