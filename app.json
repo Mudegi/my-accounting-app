@@ -45,7 +45,8 @@
         {
           "cameraPermission": "Allow YourBooks Pos to use the camera for barcode scanning"
         }
-      ]
+      ],
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "typedRoutes": true

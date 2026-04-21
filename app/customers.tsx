@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   StyleSheet,
   TouchableOpacity,
@@ -15,7 +15,7 @@ import { Text, View } from '@/components/Themed';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { exportData, importData } from '@/lib/import-export';
 
 const BUYER_TYPES = [

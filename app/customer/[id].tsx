@@ -18,7 +18,7 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useFocusEffect } from 'expo-router';
 import { fetchCustomerBalance, fetchDetailedHistory, fetchCustomerStatement } from '@/lib/customer-utils';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { shareStatementPdf, printStatement, type StatementData } from '@/lib/statements';
+import { shareStatementPdf, printStatement, type StatementData } from '@/lib/receipt';
 
 type Customer = {
   id: string;
@@ -93,9 +93,9 @@ export default function CustomerProfileScreen() {
     if (!customer?.email && type === 'email') return;
 
     let url = '';
-    if (type === 'call') url = `tel:${customer.phone}`;
-    if (type === 'whatsapp') url = `whatsapp://send?phone=${customer.phone}`;
-    if (type === 'email') url = `mailto:${customer.email}`;
+    if (type === 'call') url = `tel:${customer?.phone}`;
+    if (type === 'whatsapp') url = `whatsapp://send?phone=${customer?.phone}`;
+    if (type === 'email') url = `mailto:${customer?.email}`;
 
     Linking.canOpenURL(url).then(supported => {
       if (supported) Linking.openURL(url);
@@ -110,7 +110,7 @@ export default function CustomerProfileScreen() {
       businessTin: business.tin,
       businessPhone: business.phone,
       businessAddress: business.address,
-      businessLogo: business.logo_url,
+      logoUrl: business.logo_url,
       customerName: customer.name,
       customerPhone: customer.phone,
       startDate: startDate.toLocaleDateString(),
@@ -279,8 +279,8 @@ export default function CustomerProfileScreen() {
         )}
       </ScrollView>
 
-      {showStartPicker && <DateTimePicker value={startDate} mode="date" onChange={(e, d) => { setShowStartPicker(false); if(d) setStartDate(d); }} />}
-      {showEndPicker && <DateTimePicker value={endDate} mode="date" onChange={(e, d) => { setShowEndPicker(false); if(d) setEndDate(d); }} />}
+      {showStartPicker && <DateTimePicker value={startDate} mode="date" onChange={(e: any, d?: Date) => { setShowStartPicker(false); if(d) setStartDate(d); }} />}
+      {showEndPicker && <DateTimePicker value={endDate} mode="date" onChange={(e: any, d?: Date) => { setShowEndPicker(false); if(d) setEndDate(d); }} />}
 
     </View>
   );

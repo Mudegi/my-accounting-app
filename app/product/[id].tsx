@@ -121,31 +121,32 @@ export default function ProductFormScreen() {
   };
 
   const loadProduct = async (productId: string) => {
-    const { data } = await supabase
-      .from('products')
-      .select(`
-        *,
-        inventory!inner(selling_price, avg_cost_price, quantity, reorder_level)
-      `)
-      .eq('id', productId)
-      .eq('inventory.branch_id', currentBranch?.id)
-      .single();
+    try {
+      const { data } = await supabase
+        .from('products')
+        .select(`
+          *,
+          inventory!inner(selling_price, avg_cost_price, quantity, reorder_level)
+        `)
+        .eq('id', productId)
+        .eq('inventory.branch_id', currentBranch?.id)
+        .single();
 
-    if (data) {
-      setName(data.name);
-      setBarcode(data.barcode || '');
-      setSku(data.sku || data.commodity_code || '');
-      setDescription(data.description || '');
-      setUnit(data.unit || '101');
-      setIsService(data.is_service ?? false);
-      setCategoryId(data.category_id || '');
-      if (data.image_url) setImageUri(data.image_url);
-      // EFRIS fields
-      setProductId(data.id);
-      setCommodityCode(data.commodity_code || '');
-      setTaxCategoryCode(data.tax_category_code || '01');
-      setEfrisProductCode(data.efris_product_code || null);
-      setEfrisRegisteredAt(data.efris_registered_at || null);
+      if (data) {
+        setName(data.name);
+        setBarcode(data.barcode || '');
+        setSku(data.sku || data.commodity_code || '');
+        setDescription(data.description || '');
+        setUnit(data.unit || '101');
+        setIsService(data.is_service ?? false);
+        setCategoryId(data.category_id || '');
+        if (data.image_url) setImageUri(data.image_url);
+        // EFRIS fields
+        setProductId(data.id);
+        setCommodityCode(data.commodity_code || '');
+        setTaxCategoryCode(data.tax_category_code || '01');
+        setEfrisProductCode(data.efris_product_code || null);
+        setEfrisRegisteredAt(data.efris_registered_at || null);
       const inv = (data as any).inventory?.[0];
         if (inv) {
           setSellingPrice(inv.selling_price?.toString() || '');

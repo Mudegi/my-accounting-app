@@ -126,7 +126,7 @@ export function SubscriptionBanner() {
             {isCritical ? 'Subscription Expiring!' : 'Subscription Renewal'}
           </Text>
           <Text style={styles.subtitle}>
-            Your {subscriptionStatus.display_name} plan expires in {daysLeft} {daysLeft === 1 ? 'day' : 's'}.
+            Your {subscriptionStatus?.display_name} plan expires in {daysLeft} {daysLeft === 1 ? 'day' : 's'}.
           </Text>
         </View>
         

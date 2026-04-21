@@ -21,7 +21,7 @@ import { useAuth } from '@/lib/auth';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useRouter, Redirect } from 'expo-router';
 import FieldSellScreen from '../field-sales/sell';
-import { postSaleEntry, postCustomerPaymentEntry } from '@/lib/accounting';
+import { postSaleEntry, postCustomerPaymentEntry, PAYMENT_METHODS } from '@/lib/accounting';
 import { fetchCustomerBalance } from '@/lib/customer-utils';
 import { loadCurrencies, convertCurrency, getCurrency, type Currency } from '@/lib/currency';
 import {
@@ -79,6 +79,7 @@ export default function SalesScreen() {
   const [showSearch, setShowSearch] = useState(false);
   const [allProducts, setAllProducts] = useState<InventoryItem[]>([]);
   const [lastScannedCode, setLastScannedCode] = useState('');
+  const [showQuickAddCustomer, setShowQuickAddCustomer] = useState(false);
   const scanTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [expandedDiscountId, setExpandedDiscountId] = useState<string | null>(null);
   const [editingPriceId, setEditingPriceId] = useState<string | null>(null);
@@ -129,7 +130,7 @@ export default function SalesScreen() {
   };
 
   // Customer picker state
-  type CustomerOption = { id: string; name: string; tin: string | null; buyer_type: string; phone: string | null };
+  type CustomerOption = { id: string; name: string; tin: string | null; buyer_type: string; phone: string | null; credit_limit: number };
   const [customersList, setCustomersList] = useState<CustomerOption[]>([]);
   const [customerSearch, setCustomerSearch] = useState('');
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
@@ -143,7 +144,6 @@ export default function SalesScreen() {
   // Multi-currency support initialization
   useEffect(() => {
     loadAllProducts();
-    loadCategories();
     loadCurrencies().then(setAvailableCurrencies);
   }, []);
 
@@ -212,7 +212,7 @@ export default function SalesScreen() {
     if (!business) return;
     const { data } = await supabase
       .from('customers')
-      .select('id, name, tin, buyer_type, phone')
+      .select('id, name, tin, buyer_type, phone, credit_limit')
       .eq('business_id', business.id)
       .order('name');
     if (data) setCustomersList(data);
@@ -539,7 +539,7 @@ export default function SalesScreen() {
       if (error) throw error;
 
       // Update local choices
-      const newCustomer = { id: data.id, name: data.name, tin: data.tin, phone: data.phone };
+      const newCustomer: CustomerOption = { id: data.id, name: data.name, tin: data.tin, phone: data.phone, buyer_type: data.buyer_type, credit_limit: data.credit_limit || 0 };
       setCustomersList(prev => [newCustomer, ...prev]);
       
       if (quickAddSource === 'credit') {
@@ -1181,7 +1181,7 @@ export default function SalesScreen() {
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: '#0f3460' }}>
              <Text style={{ color: '#aaa', fontSize: 13 }}>Display Currency</Text>
              <View style={{ flexDirection: 'row', gap: 6 }}>
-               {availableCurrencies.filter(c => c.is_active).map(c => (
+               {availableCurrencies.map(c => (
                  <TouchableOpacity
                    key={c.code}
                    onPress={() => setSaleCurrency(c.code)}
@@ -1217,7 +1217,7 @@ export default function SalesScreen() {
             contentContainerStyle={{ gap: 6 }}
             style={{ backgroundColor: 'transparent' }}
           >
-            {PAYMENT_METHODS.map(pm => (
+            {PAYMENT_METHODS.map((pm: any) => (
               <TouchableOpacity
                 key={pm.value}
                 onPress={() => setSalePayMethod(pm.value)}
@@ -1274,14 +1274,14 @@ export default function SalesScreen() {
                <>
                  <Text style={{ color: '#aaa', fontSize: 11, marginTop: 12, marginBottom: 6 }}>Paid via:</Text>
                  <View style={{ flexDirection: 'row', gap: 6 }}>
-                   {['cash', 'mobile_money', 'card'].map(m => (
+                   {['cash', 'mobile_money', 'card'].map((m: any) => (
                      <TouchableOpacity
                        key={m}
                        onPress={() => setUpfrontMethod(m)}
                        style={{ flex: 1, paddingVertical: 6, borderRadius: 8, backgroundColor: upfrontMethod === m ? '#4CAF50' : '#0f3460', alignItems: 'center' }}
                      >
                        <Text style={{ color: upfrontMethod === m ? '#fff' : '#aaa', fontSize: 10, fontWeight: 'bold' }}>
-                         {PAYMENT_METHODS.find(p => p.value === m)?.label || m}
+                         {PAYMENT_METHODS.find((p: any) => p.value === m)?.label || m}
                        </Text>
                      </TouchableOpacity>
                    ))}

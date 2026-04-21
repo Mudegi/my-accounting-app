@@ -37,6 +37,7 @@ type PurchaseItemRow = {
   tax_rate: number;
   tax_amount: number;
   tax_category: string;
+  efris_product_code?: string | null;
 };
 
 export default function PurchaseDetailScreen() {

@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   StyleSheet,
   TouchableOpacity,
@@ -23,6 +23,7 @@ type Expense = {
   category: string;
   description: string | null;
   amount: number;
+  base_total?: number;
   date: string;
   branch_name?: string;
 };
@@ -223,7 +224,7 @@ export default function ExpensesScreen() {
           <Text style={styles.label}>Expense Currency</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
             <View style={styles.chipRow}>
-              {availableCurrencies.filter(c => c.is_active).map((c) => (
+              {availableCurrencies.map((c) => (
                 <TouchableOpacity
                   key={c.code}
                   style={[styles.chip, expenseCurrency === c.code && styles.chipActive]}

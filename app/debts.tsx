@@ -1020,7 +1020,7 @@ export default function DebtsScreen() {
                   <DateTimePicker
                     value={startDate}
                     mode="date"
-                    onChange={(event, date) => {
+                    onChange={(event: any, date?: Date) => {
                       setShowStartPicker(false);
                       if (date) setStartDate(date);
                     }}
@@ -1030,7 +1030,7 @@ export default function DebtsScreen() {
                   <DateTimePicker
                     value={endDate}
                     mode="date"
-                    onChange={(event, date) => {
+                    onChange={(event: any, date?: Date) => {
                       setShowEndPicker(false);
                       if (date) setEndDate(date);
                     }}

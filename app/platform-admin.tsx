@@ -41,15 +41,19 @@ type BusinessRow = {
   owner_name: string | null;
   owner_email: string | null;
   plan_name: string | null;
-  user_count: number;
   is_efris_enabled: boolean;
   efris_api_key: string | null;
   efris_api_url: string | null;
   efris_test_mode: boolean;
-  efris_test_mode: boolean;
   active_devices: number;
   is_disabled: boolean;
   disabled_reason: string | null;
+  user_count: number;
+  branch_count: number;
+  product_count: number;
+  max_users: number;
+  max_branches: number;
+  max_products: number;
 };
 
 type PaymentRow = {
@@ -124,7 +128,6 @@ export default function PlatformAdminScreen() {
   // Contact info settings
   const [contactPhone, setContactPhone] = useState('');
   const [contactWhatsapp, setContactWhatsapp] = useState('');
-  const [contactEmail, setContactEmail] = useState('');
   const [contactEmail, setContactEmail] = useState('');
   const [savingContacts, setSavingContacts] = useState(false);
 

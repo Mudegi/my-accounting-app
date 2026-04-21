@@ -263,13 +263,19 @@ export default function SaleDetailScreen() {
 
       {/* Actions */}
       <View style={styles.actions}>
+        <TouchableOpacity 
+          style={styles.actionBtn}
+          onPress={() => router.push({ pathname: '/receipt', params: { saleId: sale.id } })}
+        >
+          <FontAwesome name="print" size={18} color="#fff" />
+          <Text style={styles.actionText}>Print / Share Receipt</Text>
         </TouchableOpacity>
 
         {/* Fiscalize Button for non-submitted sales */}
         {sale.efris_status !== 'submitted' && business?.is_efris_enabled && (
           <TouchableOpacity
             style={[styles.actionBtn, { backgroundColor: '#4CAF50', marginTop: 12 }]}
-            onPress={() => router.push({ pathname: '/fiscalize-sale', params: { saleId: sale.id } })}
+            onPress={() => router.push({ pathname: '/fiscalize-sale' as any, params: { saleId: sale.id } })}
           >
             <FontAwesome name="paper-plane" size={18} color="#fff" />
             <Text style={styles.actionText}>Modify & Submit to EFRIS</Text>

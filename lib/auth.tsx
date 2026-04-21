@@ -25,6 +25,7 @@ type Profile = {
 type Business = {
   id: string;
   name: string;
+  country: string | null;
   tin: string | null;
   phone: string | null;
   email: string | null;
@@ -74,7 +75,7 @@ type AuthContextType = {
   subscriptionStatus: SubscriptionStatus | null;
   isSuperAdmin: boolean;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
-  signUp: (email: string, password: string, fullName: string, businessName: string) => Promise<{ error: any }>;
+  signUp: (email: string, password: string, fullName: string, businessName: string, country: string, currency: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<{ error: any }>;
   changePassword: (newPassword: string) => Promise<{ error: any }>;
@@ -295,7 +296,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (userBranch) setCurrentBranch(userBranch);
         } else if (branchesData.length > 0) {
           setCurrentBranch(branchesData[0]);
-        }
         }
       }
 

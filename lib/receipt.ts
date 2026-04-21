@@ -91,6 +91,7 @@ export type StatementData = {
   entries: StatementEntry[];
   closingBalance: number;
   currencySymbol?: string;
+  logoUrl?: string | null;
 };
 
 function fmt(amount: number): string {

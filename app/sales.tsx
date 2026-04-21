@@ -1,3 +1,8 @@
+import React, { useState, useCallback } from 'react';
+import {
+  StyleSheet,
+  TouchableOpacity,
+  FlatList,
   RefreshControl,
   TextInput,
   Modal,
@@ -481,7 +486,7 @@ export default function SalesScreen() {
             {(item.efris_status !== 'submitted' && business?.is_efris_enabled) && (
               <TouchableOpacity
                 style={styles.fiscalizeRowBtn}
-                onPress={() => router.push({ pathname: '/fiscalize-sale', params: { saleId: item.id } })}
+                onPress={() => router.push({ pathname: '/fiscalize-sale' as any, params: { saleId: item.id } })}
               >
                 <FontAwesome name="paper-plane-o" size={12} color="#e94560" />
                 <Text style={styles.fiscalizeRowText}>Modify & Submit to EFRIS</Text>

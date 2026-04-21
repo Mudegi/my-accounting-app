@@ -571,7 +571,7 @@ export async function getTrialBalance(params: {
 
     // Filter by fiscal start if it's P&L account
     const isPnL = acc.account_type === 'revenue' || acc.account_type === 'expense';
-    if (isPnL && line.journal_entries.entry_date < fiscalStartDate) return;
+    if (isPnL && line.journal_entries?.[0]?.entry_date < fiscalStartDate) return;
 
     const dr = Number(line.base_debit) || 0;
     const cr = Number(line.base_credit) || 0;

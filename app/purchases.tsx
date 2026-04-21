@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   StyleSheet,
   TouchableOpacity,
@@ -23,6 +23,7 @@ type Purchase = {
   id: string;
   supplier_name: string | null;
   total_amount: number;
+  base_total?: number;
   created_at: string;
   created_by_name: string;
   payment_method: string;
@@ -178,6 +179,8 @@ export default function PurchasesScreen() {
     ? suppliersList.filter(s => s.name.toLowerCase().includes(supplierSearch.toLowerCase()))
     : suppliersList;
 
+  const openForm = () => {
+    loadProducts();
     loadSuppliers(); 
     const defTax = taxes.find(t => t.is_default) || taxes[0] || { code: '01', rate: 0.18 };
     setLineItems([{
@@ -414,7 +417,7 @@ export default function PurchasesScreen() {
           <Text style={styles.label}>Purchase Currency</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
             <View style={styles.chipRow}>
-              {availableCurrencies.filter(c => c.is_active).map((c) => (
+              {availableCurrencies.map((c) => (
                 <TouchableOpacity
                   key={c.code}
                   style={[styles.chip, purchaseCurrency === c.code && styles.chipActive]}
@@ -631,6 +634,7 @@ const styles = StyleSheet.create({
   label: { color: '#aaa', fontSize: 13, marginBottom: 6 },
   chipGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
   chip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 18, backgroundColor: '#0f3460', borderWidth: 1, borderColor: '#0f3460', marginBottom: 4 },
+  chipRow: { flexDirection: 'row', gap: 8 },
   chipActive: { backgroundColor: '#e94560', borderColor: '#e94560' },
   chipText: { color: '#aaa', fontSize: 13 },
   chipTextActive: { color: '#fff', fontWeight: 'bold' },

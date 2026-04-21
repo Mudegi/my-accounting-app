@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { printStatement, shareStatementPdf, type StatementData, type StatementEntry } from './statements';
+import { printStatement, shareStatementPdf, type StatementData, type StatementEntry } from './receipt';
 
 /**
  * Fetches the current outstanding credit balance for a customer.

@@ -17,6 +17,7 @@ import {
   computeBalanceSheet,
   computeVatSummary,
   type AccountBalance,
+  ACC,
 } from '@/lib/accounting';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
@@ -294,7 +295,7 @@ export default function ReportsScreen() {
           yAxisThickness={0}
           xAxisThickness={0}
           hideRules
-          labelTextStyle={{ color: '#aaa', fontSize: 10 }}
+          topLabelTextStyle={{ color: '#aaa', fontSize: 10 }}
           yAxisTextStyle={{ color: '#aaa', fontSize: 10 }}
           isAnimated
         />
@@ -726,7 +727,7 @@ export default function ReportsScreen() {
               yAxisThickness={0}
               xAxisThickness={0}
               hideRules
-              labelTextStyle={{ color: '#aaa', fontSize: 12 }}
+              topLabelTextStyle={{ color: '#aaa', fontSize: 12 }}
               yAxisTextStyle={{ color: '#aaa', fontSize: 10 }}
             />
           </View>

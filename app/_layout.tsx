@@ -63,6 +63,10 @@ function RootLayoutNav() {
   const [changingPwd, setChangingPwd] = useState(false);
   const [showPwd, setShowPwd] = useState(false);
 
+  // Show loading while auth is initializing OR while session exists but profile isn't ready yet
+  const isSyncing = session && !profile;
+  const showSpinner = loading || isInitializing || isSyncing;
+
   // Show "check your internet" after 15s of loading
   useEffect(() => {
     if (showSpinner) {
@@ -131,8 +135,7 @@ function RootLayoutNav() {
   }, [session, loading, segments, business]);
 
   // Show loading while auth is initializing OR while session exists but profile isn't ready yet
-  const isSyncing = session && !profile;
-  const showSpinner = loading || isInitializing || isSyncing;
+
 
   if (showSpinner) {
     return (

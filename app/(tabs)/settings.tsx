@@ -961,7 +961,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
   },
-  sectionTitle: { fontSize: 16, color: '#fff', fontWeight: 'bold' },
+  formSectionTitle: { fontSize: 16, color: '#fff', fontWeight: 'bold' },
   inputGroup: { marginTop: 8, backgroundColor: 'transparent' },
   inputLabel: { color: '#aaa', fontSize: 12, marginBottom: 4 },
   input: { backgroundColor: '#0f3460', borderRadius: 10, padding: 12, color: '#fff', fontSize: 14 },
