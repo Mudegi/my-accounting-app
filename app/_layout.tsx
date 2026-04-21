@@ -9,6 +9,7 @@ import { ActivityIndicator, TouchableOpacity, Modal, TextInput, StyleSheet, Aler
 import { View, Text } from '@/components/Themed';
 
 import { AuthProvider, useAuth } from '@/lib/auth';
+import { SubscriptionBanner } from '@/components/SubscriptionBanner';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -62,16 +63,16 @@ function RootLayoutNav() {
   const [changingPwd, setChangingPwd] = useState(false);
   const [showPwd, setShowPwd] = useState(false);
 
-  // Show "check your internet" after 10s of loading
+  // Show "check your internet" after 15s of loading
   useEffect(() => {
-    if (loading) {
+    if (showSpinner) {
       setLoadingTooLong(false);
-      const timer = setTimeout(() => setLoadingTooLong(true), 10000);
+      const timer = setTimeout(() => setLoadingTooLong(true), 15000);
       return () => clearTimeout(timer);
     } else {
       setLoadingTooLong(false);
     }
-  }, [loading]);
+  }, [showSpinner]);
 
   // Detect first login for invited users — prompt password change
   useEffect(() => {
@@ -134,17 +135,6 @@ function RootLayoutNav() {
   const showSpinner = loading || isInitializing || isSyncing;
 
   if (showSpinner) {
-    let loadingText = 'Loading YourBooks...';
-    let subtext = 'Designing your financial future';
-    
-    if (isInitializing) {
-      loadingText = 'Creating Account...';
-      subtext = 'Setting up your business workspace';
-    } else if (isSyncing) {
-      loadingText = 'Syncing Data...';
-      subtext = 'Finalizing your account setup';
-    }
-
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#1a1a2e', paddingHorizontal: 32 }}>
         <View style={{ marginBottom: 40, alignItems: 'center' }}>
@@ -152,26 +142,19 @@ function RootLayoutNav() {
           <ActivityIndicator size="large" color="#e94560" />
         </View>
         
-        <Text style={{ color: '#fff', fontSize: 20, fontWeight: '600', marginBottom: 8 }}>{loadingText}</Text>
-        <Text style={{ color: '#aaa', fontSize: 14, textAlign: 'center' }}>{subtext}</Text>
+        <Text style={{ color: '#fff', fontSize: 18, fontWeight: '600', textAlign: 'center' }}>Hold on, we're setting up your account...</Text>
 
         {loadingTooLong && (
           <View style={{ marginTop: 40, alignItems: 'center', width: '100%' }}>
-            <Text style={{ color: '#e94560', fontSize: 13, fontWeight: 'bold', marginBottom: 8 }}>POOR CONNECTION</Text>
-            <Text style={{ color: '#888', fontSize: 13, textAlign: 'center', lineHeight: 20, marginBottom: 20 }}>
-              {isSyncing ? "We're having trouble syncing your profile data." : "Loading is taking longer than usual."}{'\n'}Please check your internet connection.
+            <Text style={{ color: '#e94560', fontSize: 13, fontWeight: 'bold', marginBottom: 8, letterSpacing: 1 }}>POOR CONNECTION</Text>
+            <Text style={{ color: '#aaa', fontSize: 13, textAlign: 'center', lineHeight: 20, marginBottom: 24 }}>
+              Setup is taking longer than usual.{'\n'}Please ensure you have a stable internet connection.
             </Text>
             <TouchableOpacity
               onPress={() => { setLoadingTooLong(false); reloadUserData(); }}
               style={{ width: '100%', backgroundColor: '#e94560', borderRadius: 12, paddingVertical: 14, alignItems: 'center' }}
             >
-              <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 15 }}>Retry Connection</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => signOut()}
-              style={{ marginTop: 16, paddingVertical: 10 }}
-            >
-              <Text style={{ color: '#666', fontSize: 14, textDecorationLine: 'underline' }}>Sign Out</Text>
+              <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 15 }}>Retry Setup</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -194,6 +177,7 @@ function RootLayoutNav() {
 
   return (
     <ThemeProvider value={appTheme}>
+      {session && business && <SubscriptionBanner />}
       <Stack>
         <Stack.Screen name="login" options={{ headerShown: false }} />
         <Stack.Screen name="onboarding" options={{ headerShown: false }} />

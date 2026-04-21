@@ -34,6 +34,7 @@ type Customer = {
   address: string | null;
   buyer_type: string;
   contact_person: string | null;
+  credit_limit: number;
   created_at: string;
 };
 
@@ -49,11 +50,17 @@ export default function CustomersScreen() {
   const [email, setEmail] = useState('');
   const [address, setAddress] = useState('');
   const [contactPerson, setContactPerson] = useState('');
-  const [buyerType, setBuyerType] = useState('1'); // B2C default
+  const [editReceiptFooter, setEditReceiptFooter] = useState('');
+  const [buyerType, setBuyerType] = useState('1'); 
+  const [creditLimit, setCreditLimit] = useState('0');
   const [saving, setSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
+
+  // Handle direct edit from dashboard
+  const { editId } = useLocalSearchParams<{ editId: string }>();
+  const router = useRouter();
 
   const load = useCallback(async () => {
     if (!business) return;
@@ -67,9 +74,20 @@ export default function CustomersScreen() {
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
+  useEffect(() => {
+    if (editId && customers.length > 0) {
+      const c = customers.find(x => x.id === editId);
+      if (c) openEdit(c);
+      // Clear the param
+      router.setParams({ editId: undefined } as any);
+    }
+  }, [editId, customers]);
+
   const resetForm = () => {
     setName(''); setTin(''); setPhone(''); setEmail('');
-    setAddress(''); setContactPerson(''); setBuyerType('1'); setEditingId(null);
+    setAddress(''); setContactPerson(''); setBuyerType('1'); 
+    setCreditLimit('0');
+    setEditingId(null);
   };
 
   const openNew = () => { resetForm(); setShowForm(true); };
@@ -83,6 +101,7 @@ export default function CustomersScreen() {
     setAddress(c.address || '');
     setContactPerson(c.contact_person || '');
     setBuyerType(c.buyer_type || '1');
+    setCreditLimit(c.credit_limit?.toString() || '0');
     setShowForm(true);
   };
 
@@ -101,6 +120,7 @@ export default function CustomersScreen() {
       address: address.trim() || null,
       contact_person: contactPerson.trim() || null,
       buyer_type: buyerType,
+      credit_limit: parseFloat(creditLimit) || 0,
     };
 
     if (editingId) {
@@ -225,7 +245,7 @@ export default function CustomersScreen() {
         data={filtered}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
-          <TouchableOpacity style={styles.card} onPress={() => openEdit(item)}>
+          <TouchableOpacity style={styles.card} onPress={() => router.push(`/customer/${item.id}` as any)}>
             <View style={styles.cardHeader}>
               <View style={styles.cardInfo}>
                 <Text style={styles.cardName}>{item.name}</Text>
@@ -298,6 +318,9 @@ export default function CustomersScreen() {
 
               <Text style={styles.label}>Contact Person</Text>
               <TextInput style={styles.input} placeholder="Contact name" placeholderTextColor="#555" value={contactPerson} onChangeText={setContactPerson} />
+
+              <Text style={styles.label}>Credit Limit (UGX)</Text>
+              <TextInput style={styles.input} placeholder="e.g. 1000000" placeholderTextColor="#555" value={creditLimit} onChangeText={setCreditLimit} keyboardType="numeric" />
 
               <TouchableOpacity
                 style={[styles.saveBtn, saving && { opacity: 0.6 }]}

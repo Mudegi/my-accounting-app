@@ -28,6 +28,8 @@ type SaleDetail = {
   created_at: string;
   seller_name: string;
   branch_name: string;
+  efris_status: string;
+  efris_error: string | null;
 };
 
 type SaleItemRow = {
@@ -111,6 +113,8 @@ export default function SaleDetailScreen() {
         created_at: saleData.created_at,
         seller_name: sellerName,
         branch_name: branchName,
+        efris_status: saleData.efris_status || 'not_required',
+        efris_error: saleData.efris_error || null,
       });
 
       const { data: itemsData } = await supabase
@@ -259,13 +263,18 @@ export default function SaleDetailScreen() {
 
       {/* Actions */}
       <View style={styles.actions}>
-        <TouchableOpacity
-          style={styles.actionBtn}
-          onPress={() => router.push({ pathname: '/receipt', params: { saleId: sale.id } } as any)}
-        >
-          <FontAwesome name="file-text-o" size={18} color="#fff" />
-          <Text style={styles.actionText}>View Receipt</Text>
         </TouchableOpacity>
+
+        {/* Fiscalize Button for non-submitted sales */}
+        {sale.efris_status !== 'submitted' && business?.is_efris_enabled && (
+          <TouchableOpacity
+            style={[styles.actionBtn, { backgroundColor: '#4CAF50', marginTop: 12 }]}
+            onPress={() => router.push({ pathname: '/fiscalize-sale', params: { saleId: sale.id } })}
+          >
+            <FontAwesome name="paper-plane" size={18} color="#fff" />
+            <Text style={styles.actionText}>Modify & Submit to EFRIS</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Sale ID */}

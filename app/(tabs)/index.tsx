@@ -21,13 +21,14 @@ import { useAuth } from '@/lib/auth';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useRouter, Redirect } from 'expo-router';
 import FieldSellScreen from '../field-sales/sell';
-import { postSaleEntry, PAYMENT_METHODS } from '@/lib/accounting';
+import { postSaleEntry, postCustomerPaymentEntry } from '@/lib/accounting';
+import { fetchCustomerBalance } from '@/lib/customer-utils';
+import { loadCurrencies, convertCurrency, getCurrency, type Currency } from '@/lib/currency';
 import {
   fiscalizeInvoice,
   buildInvoicePayload,
   EFRIS_PAYMENT_METHODS,
   EFRIS_BUYER_TYPES,
-  EFRIS_TAX_CATEGORIES,
   EFRIS_UNIT_MAP,
   type EfrisConfig,
 } from '@/lib/efris';
@@ -60,15 +61,9 @@ type InventoryItem = {
   is_service: boolean;
 };
 
-const SALE_TAX_OPTIONS = [
-  { label: 'No Tax', code: '11', rate: 0 },
-  { label: '18% VAT', code: '01', rate: 0.18 },
-  { label: 'Zero Rated', code: '02', rate: 0 },
-  { label: 'Exempt', code: '03', rate: 0 },
-];
 
 export default function SalesScreen() {
-  const { currentBranch, business, profile, fmt, currency } = useAuth();
+  const { currentBranch, business, profile, fmt, currency, hasFeature, taxes } = useAuth();
   const router = useRouter();
 
   // Field-only salespeople see the Field Sell screen within the same tab
@@ -88,6 +83,12 @@ export default function SalesScreen() {
   const [expandedDiscountId, setExpandedDiscountId] = useState<string | null>(null);
   const [editingPriceId, setEditingPriceId] = useState<string | null>(null);
   const [editPriceValue, setEditPriceValue] = useState('');
+
+  // Multi-currency support
+  const [saleCurrency, setSaleCurrency] = useState(business?.default_currency || 'UGX');
+  const [exchangeRate, setExchangeRate] = useState(1);
+  const [availableCurrencies, setAvailableCurrencies] = useState<Currency[]>([]);
+  const [isConverting, setIsConverting] = useState(false);
 
   // Back handler: close camera instead of closing the app
   useEffect(() => {
@@ -132,6 +133,51 @@ export default function SalesScreen() {
   const [customersList, setCustomersList] = useState<CustomerOption[]>([]);
   const [customerSearch, setCustomerSearch] = useState('');
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
+  
+  // Quick Add Customer states
+  const [isSavingCustomer, setIsSavingCustomer] = useState(false);
+  const [quickAddName, setQuickAddName] = useState('');
+  const [quickAddPhone, setQuickAddPhone] = useState('');
+
+  // Multi-currency support initialization
+  useEffect(() => {
+    loadAllProducts();
+    loadCategories();
+    loadCurrencies().then(setAvailableCurrencies);
+  }, []);
+
+  useEffect(() => {
+    if (business?.default_currency) {
+      setSaleCurrency(business.default_currency);
+    }
+  }, [business?.default_currency]);
+
+  useEffect(() => {
+    const updateRate = async () => {
+      if (!business) return;
+      if (saleCurrency === business.default_currency) {
+        setExchangeRate(1);
+        return;
+      }
+      setIsConverting(true);
+      try {
+        const { rate } = await convertCurrency(business.id, 1, business.default_currency, saleCurrency);
+        setExchangeRate(rate);
+      } catch (e) {
+        console.error('Rate update error:', e);
+      } finally {
+        setIsConverting(false);
+      }
+    };
+    updateRate();
+  }, [saleCurrency, business?.default_currency]);
+
+  // Partial Payment State
+  const [upfrontAmount, setUpfrontAmount] = useState('');
+  const [upfrontMethod, setUpfrontMethod] = useState('cash');
+
+  const [quickAddSource, setQuickAddSource] = useState<'credit' | 'efris'>('credit');
 
   const subtotalAmount = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const discountInput = parseFloat(discount) || 0;
@@ -328,10 +374,10 @@ export default function SalesScreen() {
   // Add item to cart
   const addToCart = (product: InventoryItem) => {
     // Non-EFRIS users: no tax calculation, price = price
-    // EFRIS users: resolve tax rate from product's tax category
-    const taxCat = EFRIS_TAX_CATEGORIES.find(t => t.code === product.tax_category_code);
-    const defaultTaxRate = efrisEnabled ? (taxCat?.rate ?? 0) : 0;
-    const defaultTaxCode = efrisEnabled ? (product.tax_category_code || '01') : '11';
+    // Resolve tax rate from product's tax category or business defaults
+    const taxCat = taxes.find(t => t.code === product.tax_category_code);
+    const defaultTaxRate = taxCat?.rate ?? 0;
+    const defaultTaxCode = product.tax_category_code || (taxes.find(t => t.is_default)?.code) || '11';
     setCart((prev) => {
       const existing = prev.find((item) => item.product_id === product.id);
       if (existing) {
@@ -385,14 +431,14 @@ export default function SalesScreen() {
   const updateQuantity = (id: string, delta: number) => {
     setCart((prev) => {
       const target = prev.find((item) => item.id === id);
-      if (target && delta > 0 && target.quantity >= target.stock_quantity) {
+      if (target && delta > 0 && !target.is_service && target.quantity >= target.stock_quantity) {
         Alert.alert('Stock Limit', `Only ${target.stock_quantity} unit(s) of "${target.name}" available in stock.`);
         return prev;
       }
       return prev
         .map((item) =>
           item.id === id
-            ? { ...item, quantity: Math.max(0, Math.min(item.stock_quantity, item.quantity + delta)) }
+            ? { ...item, quantity: Math.max(0, item.is_service ? (item.quantity + delta) : Math.min(item.stock_quantity, item.quantity + delta)) }
             : item
         )
         .filter((item) => item.quantity > 0);
@@ -403,7 +449,7 @@ export default function SalesScreen() {
     const qty = parseFloat(value) || 0;
     setCart((prev) => {
       const target = prev.find((item) => item.id === id);
-      if (target && qty > target.stock_quantity) {
+      if (target && !target.is_service && qty > target.stock_quantity) {
         Alert.alert('Stock Limit', `Only ${target.stock_quantity} unit(s) of "${target.name}" available in stock.`);
         return prev.map(item => item.id === id ? { ...item, quantity: item.stock_quantity } : item);
       }
@@ -470,6 +516,55 @@ export default function SalesScreen() {
       )
     : customersList;
 
+  const handleQuickAddSave = async () => {
+    if (!quickAddName.trim()) {
+      Alert.alert('Error', 'Customer name is required');
+      return;
+    }
+    if (!business) return;
+    
+    setIsSavingCustomer(true);
+    try {
+      const { data, error } = await supabase
+        .from('customers')
+        .insert({
+          business_id: business.id,
+          name: quickAddName.trim(),
+          phone: quickAddPhone.trim() || null,
+          buyer_type: '1', // Default to B2C for quick add
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Update local choices
+      const newCustomer = { id: data.id, name: data.name, tin: data.tin, phone: data.phone };
+      setCustomersList(prev => [newCustomer, ...prev]);
+      
+      if (quickAddSource === 'credit') {
+        setCreditCustomer(newCustomer);
+        setShowCreditPicker(false);
+      } else if (quickAddSource === 'efris') {
+        setSelectedCustomerId(data.id);
+        setCustomerName(data.name);
+        setCustomerTin(data.tin || '');
+        if (data.tin) setBuyerType('2'); // Auto set B2B if TIN exists
+      }
+      
+      // Close modal
+      setShowQuickAddCustomer(false);
+      
+      // Reset form
+      setQuickAddName('');
+      setQuickAddPhone('');
+    } catch (e: any) {
+      Alert.alert('Error', e.message);
+    } finally {
+      setIsSavingCustomer(false);
+    }
+  };
+
   const completeSale = async (withEfris: boolean = false) => {
     if (cart.length === 0) {
       Alert.alert('Empty Cart', 'Please add items before completing the sale.');
@@ -484,6 +579,25 @@ export default function SalesScreen() {
       return;
     }
 
+    // Credit Limit Check
+    if (salePayMethod === 'credit' && creditCustomer && creditCustomer.credit_limit > 0) {
+      try {
+        const currentBalance = await fetchCustomerBalance(business.id, creditCustomer.id, null);
+        const newTotal = currentBalance + Math.round(totalAmount) - (Number(upfrontAmount) || 0);
+        if (newTotal > creditCustomer.credit_limit) {
+          Alert.alert(
+            'Credit Limit Exceeded',
+            `This sale pushes the customer over their limit of ${fmt(creditCustomer.credit_limit)}.\n\n` +
+            `Current Balance: ${fmt(currentBalance)}\n` +
+            `Limit Remaining: ${fmt(Math.max(0, creditCustomer.credit_limit - currentBalance))}`
+          );
+          return;
+        }
+      } catch (e) {
+        console.error('Balance check error:', e);
+      }
+    }
+
     try {
       const { data: sale, error: saleError } = await supabase
         .from('sales')
@@ -495,6 +609,9 @@ export default function SalesScreen() {
           tax_amount: Math.round(taxAmount),
           discount_amount: Math.round(discountAmount),
           total_amount: Math.round(totalAmount),
+          currency: saleCurrency,
+          exchange_rate: 1 / exchangeRate, // rate from display currency BACK to base (e.g. 1 USD = 3800 UGX)
+          base_total: Math.round(totalAmount / exchangeRate), // consistent reporting
           payment_method: salePayMethod,
           status: 'completed',
           customer_id: creditCustomer?.id || null,
@@ -504,6 +621,38 @@ export default function SalesScreen() {
         .single();
 
       if (saleError) throw saleError;
+
+      // Handle Partial Payment (Upfront)
+      const upfront = Number(upfrontAmount) || 0;
+      if (salePayMethod === 'credit' && upfront > 0) {
+        if (upfront > totalAmount) {
+          throw new Error('Upfront payment cannot exceed total amount');
+        }
+
+        // Insert payment record
+        await supabase
+          .from('debt_payments')
+          .insert({
+            business_id: business.id,
+            sale_id: sale.id,
+            customer_id: creditCustomer!.id,
+            amount: upfront,
+            payment_method: upfrontMethod,
+            note: 'Initial partial payment at checkout',
+            received_by: profile.id,
+          });
+
+        // Accounting entry
+        await postCustomerPaymentEntry({
+          businessId: business.id,
+          branchId: currentBranch.id,
+          paymentId: sale.id,
+          amount: upfront,
+          customerName: creditCustomer!.name,
+          paymentMethod: upfrontMethod,
+          userId: profile.id,
+        });
+      }
 
       const saleItems = cart.map((item) => ({
         sale_id: sale.id,
@@ -552,20 +701,21 @@ export default function SalesScreen() {
         actualCOGS += (Number(avcoValue) || 0) * Number(item.quantity);
       }
 
-      // Auto-post accounting entry with accurate COGS and revenue split
       postSaleEntry({
         businessId: business.id,
         branchId: currentBranch.id,
         saleId: sale.id,
-        subtotal: subtotalAmount,
-        taxAmount: Math.round(taxAmount),
-        totalAmount: Math.round(totalAmount),
+        subtotal: subtotalAmount / exchangeRate,
+        taxAmount: Math.round(taxAmount / exchangeRate),
+        totalAmount: Math.round(totalAmount / exchangeRate),
         costOfGoods: actualCOGS,
-        goodsRevenue,
-        serviceRevenue,
-        discountAmount: discountAmount,
+        goodsRevenue: goodsRevenue / exchangeRate,
+        serviceRevenue: serviceRevenue / exchangeRate,
+        discountAmount: discountAmount / exchangeRate,
         paymentMethod: salePayMethod,
         userId: profile.id,
+        currencyCode: saleCurrency,
+        exchangeRate: 1 / exchangeRate,
       });
 
       // Auto-earn loyalty points if customer linked
@@ -890,14 +1040,14 @@ export default function SalesScreen() {
                       )}
                       {efrisEnabled && (
                         <View style={styles.taxChips}>
-                          {SALE_TAX_OPTIONS.map(opt => (
+                          {taxes.map(tax => (
                             <TouchableOpacity
-                              key={opt.code}
-                              style={[styles.taxChip, item.tax_code === opt.code && styles.taxChipActive]}
-                              onPress={() => updateItemTax(item.id, opt.code, opt.rate)}
+                              key={tax.code}
+                              style={[styles.taxChip, item.tax_code === tax.code && styles.taxChipActive]}
+                              onPress={() => updateItemTax(item.id, tax.code, tax.rate)}
                             >
-                              <Text style={[styles.taxChipText, item.tax_code === opt.code && styles.taxChipTextActive]}>
-                                {opt.label}
+                              <Text style={[styles.taxChipText, item.tax_code === tax.code && styles.taxChipTextActive]}>
+                                {tax.name}
                               </Text>
                             </TouchableOpacity>
                           ))}
@@ -1022,10 +1172,38 @@ export default function SalesScreen() {
               <Text style={styles.totalValue}>{fmt(Math.round(taxAmount))}</Text>
             </View>
           )}
-          <View style={[styles.totalRow, styles.grandTotalRow]}>
+          <View style={[styles.totalRow, styles.grandTotalRow, { borderBottomWidth: 0 }]}>
             <Text style={styles.grandTotalLabel}>TOTAL</Text>
             <Text style={styles.grandTotalValue}>{fmt(Math.round(totalAmount))}</Text>
           </View>
+
+          {/* Currency Selection */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: '#0f3460' }}>
+             <Text style={{ color: '#aaa', fontSize: 13 }}>Display Currency</Text>
+             <View style={{ flexDirection: 'row', gap: 6 }}>
+               {availableCurrencies.filter(c => c.is_active).map(c => (
+                 <TouchableOpacity
+                   key={c.code}
+                   onPress={() => setSaleCurrency(c.code)}
+                   style={{ paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, backgroundColor: saleCurrency === c.code ? '#4CAF50' : '#16213e', borderWidth: 1, borderColor: saleCurrency === c.code ? '#4CAF50' : '#0f3460' }}
+                 >
+                   <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>{c.code}</Text>
+                 </TouchableOpacity>
+               ))}
+             </View>
+          </View>
+          
+          {saleCurrency !== business?.default_currency && (
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 10 }}>
+               <Text style={{ color: '#4CAF50', fontSize: 14, fontWeight: 'bold' }}>Converted Total</Text>
+               <View style={{ alignItems: 'flex-end' }}>
+                 <Text style={{ color: '#4CAF50', fontSize: 18, fontWeight: 'bold' }}>
+                   {isConverting ? '...' : `${getCurrency(saleCurrency).symbol} ${Math.round(totalAmount * exchangeRate).toLocaleString()}`}
+                 </Text>
+                 <Text style={{ color: '#666', fontSize: 10 }}>Rate: 1 {business?.default_currency} = {exchangeRate.toFixed(2)} {saleCurrency}</Text>
+               </View>
+            </View>
+          )}
         </View>
       )}
 
@@ -1033,17 +1211,22 @@ export default function SalesScreen() {
       {cart.length > 0 && (
         <View style={{ paddingHorizontal: 16, paddingTop: 8, backgroundColor: 'transparent' }}>
           <Text style={{ color: '#aaa', fontSize: 12, marginBottom: 6 }}>Payment Method</Text>
-          <View style={{ flexDirection: 'row', gap: 6, backgroundColor: 'transparent' }}>
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ gap: 6 }}
+            style={{ backgroundColor: 'transparent' }}
+          >
             {PAYMENT_METHODS.map(pm => (
               <TouchableOpacity
                 key={pm.value}
                 onPress={() => setSalePayMethod(pm.value)}
-                style={{ flex: 1, paddingVertical: 8, borderRadius: 10, backgroundColor: salePayMethod === pm.value ? '#e94560' : '#16213e', borderWidth: 1, borderColor: salePayMethod === pm.value ? '#e94560' : '#0f3460', alignItems: 'center' }}
+                style={{ paddingVertical: 8, paddingHorizontal: 16, borderRadius: 10, backgroundColor: salePayMethod === pm.value ? '#e94560' : '#16213e', borderWidth: 1, borderColor: salePayMethod === pm.value ? '#e94560' : '#0f3460', alignItems: 'center', minWidth: 90 }}
               >
                 <Text style={{ color: salePayMethod === pm.value ? '#fff' : '#aaa', fontSize: 11, fontWeight: salePayMethod === pm.value ? 'bold' : 'normal' }}>{pm.label}</Text>
               </TouchableOpacity>
             ))}
-          </View>
+          </ScrollView>
         </View>
       )}
 
@@ -1070,9 +1253,51 @@ export default function SalesScreen() {
         </View>
       )}
 
+      {/* Upfront Payment for Credit Sales */}
+      {cart.length > 0 && salePayMethod === 'credit' && creditCustomer && (
+        <View style={{ paddingHorizontal: 16, paddingTop: 12, backgroundColor: 'transparent' }}>
+          <View style={{ backgroundColor: '#16213e', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#0f3460' }}>
+             <Text style={{ color: '#aaa', fontSize: 13, marginBottom: 8 }}>Partial Payment (Optional)</Text>
+             <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#0f3460', borderRadius: 8, paddingHorizontal: 10 }}>
+               <Text style={{ color: '#666', fontSize: 16, marginRight: 4 }}>UGX</Text>
+               <TextInput
+                 style={{ flex: 1, color: '#fff', fontSize: 16, height: 44, fontWeight: 'bold' }}
+                 placeholder="0"
+                 placeholderTextColor="#555"
+                 keyboardType="numeric"
+                 value={upfrontAmount}
+                 onChangeText={setUpfrontAmount}
+               />
+             </View>
+             
+             {Number(upfrontAmount) > 0 && (
+               <>
+                 <Text style={{ color: '#aaa', fontSize: 11, marginTop: 12, marginBottom: 6 }}>Paid via:</Text>
+                 <View style={{ flexDirection: 'row', gap: 6 }}>
+                   {['cash', 'mobile_money', 'card'].map(m => (
+                     <TouchableOpacity
+                       key={m}
+                       onPress={() => setUpfrontMethod(m)}
+                       style={{ flex: 1, paddingVertical: 6, borderRadius: 8, backgroundColor: upfrontMethod === m ? '#4CAF50' : '#0f3460', alignItems: 'center' }}
+                     >
+                       <Text style={{ color: upfrontMethod === m ? '#fff' : '#aaa', fontSize: 10, fontWeight: 'bold' }}>
+                         {PAYMENT_METHODS.find(p => p.value === m)?.label || m}
+                       </Text>
+                     </TouchableOpacity>
+                   ))}
+                 </View>
+                 <Text style={{ color: '#4CAF50', fontSize: 12, marginTop: 10, textAlign: 'right' }}>
+                    Balance to Debt: {fmt(totalAmount - (Number(upfrontAmount) || 0))}
+                 </Text>
+               </>
+             )}
+          </View>
+        </View>
+      )}
+
       {/* Complete Sale */}
       {cart.length > 0 && (
-        efrisEnabled ? (
+        (efrisEnabled && hasFeature('efris')) ? (
           <View style={styles.saleButtonRow}>
             <TouchableOpacity style={styles.completeSaleButton} onPress={() => completeSale(false)}>
               <Text style={styles.completeSaleText}>💰 Complete Sale</Text>
@@ -1111,6 +1336,20 @@ export default function SalesScreen() {
               onChangeText={setCreditCustomerSearch}
               autoFocus
             />
+
+            <TouchableOpacity 
+              style={styles.quickAddButtonShort}
+              onPress={() => {
+                setQuickAddSource('credit');
+                setQuickAddName(creditCustomerSearch);
+                setShowQuickAddCustomer(true);
+              }}
+            >
+              <FontAwesome name="user-plus" size={14} color="#fff" />
+              <Text style={{ color: '#fff', fontWeight: 'bold', marginLeft: 8 }}>
+                {creditCustomerSearch.trim() ? `Quick Add "${creditCustomerSearch}"` : 'Add New Customer'}
+              </Text>
+            </TouchableOpacity>
             <FlatList
               data={creditFilteredCustomers}
               keyExtractor={(item) => item.id}
@@ -1133,9 +1372,23 @@ export default function SalesScreen() {
                 </TouchableOpacity>
               )}
               ListEmptyComponent={
-                <Text style={{ color: '#555', textAlign: 'center', marginTop: 20 }}>
-                  {customersList.length === 0 ? 'No customers added yet.\nGo to Customers to add one.' : 'No matching customers'}
-                </Text>
+                <View style={{ alignItems: 'center', marginTop: 20, backgroundColor: 'transparent' }}>
+                  <Text style={{ color: '#555', textAlign: 'center', marginBottom: 16 }}>
+                    {customersList.length === 0 ? 'No customers added yet.' : 'No matching customers'}
+                  </Text>
+                  {creditCustomerSearch.trim().length > 0 && (
+                    <TouchableOpacity 
+                      style={styles.quickAddButton}
+                      onPress={() => {
+                        setQuickAddName(creditCustomerSearch);
+                        setShowQuickAddCustomer(true);
+                      }}
+                    >
+                      <FontAwesome name="user-plus" size={16} color="#fff" />
+                      <Text style={styles.quickAddText}>Add "{creditCustomerSearch}" as new customer</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
               }
             />
           </View>
@@ -1220,7 +1473,7 @@ export default function SalesScreen() {
               <Text style={styles.fiscalizeTitle}>🇺🇬 Fiscalize Invoice</Text>
               <Text style={styles.fiscalizeSubtitle}>Sale: {fmt(lastSaleTotal)}</Text>
 
-              <Text style={styles.fiscalizeLabel}>Customer (default: Walk-in B2C)</Text>
+               <Text style={styles.fiscalizeLabel}>Customer (default: Walk-in B2C)</Text>
               {selectedCustomerId ? (
                 <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#0f3460', borderRadius: 10, padding: 12, marginBottom: 8 }}>
                   <View style={{ flex: 1, backgroundColor: 'transparent' }}>
@@ -1236,16 +1489,36 @@ export default function SalesScreen() {
                 </View>
               ) : (
                 <>
-                  <TextInput
-                    style={styles.searchInput}
-                    placeholder="Search saved customers or type name..."
-                    placeholderTextColor="#666"
-                    value={customerSearch || customerName}
-                    onChangeText={(t) => {
-                      setCustomerSearch(t);
-                      setCustomerName(t);
-                    }}
-                  />
+                  <View style={{ flexDirection: 'row', gap: 6, marginBottom: 8, backgroundColor: 'transparent' }}>
+                    <TextInput
+                      style={[styles.searchInput, { flex: 1, marginBottom: 0 }]}
+                      placeholder="Search saved customers..."
+                      placeholderTextColor="#666"
+                      value={customerSearch}
+                      onChangeText={setCustomerSearch}
+                    />
+                    <TouchableOpacity 
+                      style={{ backgroundColor: '#e94560', width: 44, height: 44, borderRadius: 10, alignItems: 'center', justifyContent: 'center' }}
+                      onPress={() => {
+                        setQuickAddSource('efris');
+                        setQuickAddName(customerSearch);
+                        setShowQuickAddCustomer(true);
+                      }}
+                    >
+                      <FontAwesome name="user-plus" size={18} color="#fff" />
+                    </TouchableOpacity>
+                  </View>
+                  
+                  {/* Manual Name Entry if no customer selected */}
+                  {!customerSearch && (
+                    <TextInput
+                      style={[styles.searchInput, { marginBottom: filteredCustomers.length > 0 ? 8 : 4 }]}
+                      placeholder="Or type customer name manually..."
+                      placeholderTextColor="#555"
+                      value={customerName}
+                      onChangeText={setCustomerName}
+                    />
+                  )}
                   {filteredCustomers.length > 0 && (
                     <View style={{ maxHeight: 150, backgroundColor: '#16213e', borderRadius: 8, marginBottom: 8, borderWidth: 1, borderColor: '#0f3460' }}>
                       {filteredCustomers.slice(0, 5).map((item) => (
@@ -1327,6 +1600,57 @@ export default function SalesScreen() {
             </ScrollView>
           </View>
         </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Quick Add Customer Modal */}
+      <Modal visible={showQuickAddCustomer} animationType="fade" transparent>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+          <View style={styles.modalOverlay}>
+            <View style={[styles.modalContent, { maxHeight: '50%' }]}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Quick Add Customer</Text>
+                <TouchableOpacity onPress={() => setShowQuickAddCustomer(false)}>
+                  <FontAwesome name="times" size={24} color="#fff" />
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.fiscalizeLabel}>Full Name</Text>
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Customer or Plate Name"
+                placeholderTextColor="#666"
+                value={quickAddName}
+                onChangeText={setQuickAddName}
+                autoFocus
+              />
+
+              <Text style={styles.fiscalizeLabel}>Phone Number (Optional)</Text>
+              <TextInput
+                style={styles.searchInput}
+                placeholder="+256..."
+                placeholderTextColor="#666"
+                value={quickAddPhone}
+                onChangeText={setQuickAddPhone}
+                keyboardType="phone-pad"
+              />
+
+              <TouchableOpacity
+                style={[styles.quickAddButton, { marginTop: 10, width: '100%', justifyContent: 'center' }]}
+                onPress={handleQuickAddSave}
+                disabled={isSavingCustomer}
+              >
+                {isSavingCustomer ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <>
+                    <FontAwesome name="save" size={16} color="#fff" />
+                    <Text style={styles.quickAddText}>Save & Select</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
         </KeyboardAvoidingView>
       </Modal>
     </View>
@@ -1412,6 +1736,7 @@ const styles = StyleSheet.create({
   noResults: { textAlign: 'center', color: '#666', marginTop: 20, fontSize: 14 },
   emptySearchContainer: { alignItems: 'center', paddingTop: 20, backgroundColor: 'transparent' },
   quickAddButton: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#e94560', borderRadius: 12, paddingHorizontal: 20, paddingVertical: 14, marginTop: 16 },
+  quickAddButtonShort: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#e94560', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 12 },
   quickAddText: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
   // EFRIS Fiscalize styles
   fiscalizeTitle: { fontSize: 22, fontWeight: 'bold', color: '#7C3AED', textAlign: 'center', marginBottom: 4 },

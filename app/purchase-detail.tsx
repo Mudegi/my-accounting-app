@@ -10,12 +10,16 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
+import { submitStockIncrease, type EfrisConfig } from '@/lib/efris';
+import { Alert } from 'react-native';
 
 type PurchaseDetail = {
   id: string;
   supplier_name: string | null;
   supplier_tin: string | null;
   total_amount: number;
+  subtotal_amount: number;
+  vat_amount: number;
   notes: string | null;
   efris_submitted: boolean;
   efris_submitted_at: string | null;
@@ -30,15 +34,19 @@ type PurchaseItemRow = {
   quantity: number;
   unit_cost: number;
   line_total: number;
+  tax_rate: number;
+  tax_amount: number;
+  tax_category: string;
 };
 
 export default function PurchaseDetailScreen() {
   const { purchaseId } = useLocalSearchParams<{ purchaseId: string }>();
-  const { profile, fmt } = useAuth();
+  const { business, profile, fmt } = useAuth();
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [purchase, setPurchase] = useState<PurchaseDetail | null>(null);
   const [items, setItems] = useState<PurchaseItemRow[]>([]);
+  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     if (purchaseId) loadPurchase();
@@ -81,6 +89,8 @@ export default function PurchaseDetailScreen() {
         supplier_name: data.supplier_name || null,
         supplier_tin: (data as any).supplier_tin || null,
         total_amount: Number(data.total_amount),
+        subtotal_amount: Number(data.subtotal_amount || data.total_amount),
+        vat_amount: Number(data.vat_amount || 0),
         notes: data.notes || null,
         efris_submitted: (data as any).efris_submitted || false,
         efris_submitted_at: (data as any).efris_submitted_at || null,
@@ -89,26 +99,90 @@ export default function PurchaseDetailScreen() {
         branch_name: branchName,
       });
 
-      // Load items with product name via join
+      // Load items with product info via join
       const { data: itemsData } = await supabase
         .from('purchase_items')
-        .select('id, quantity, unit_cost, line_total, products(name)')
+        .select(`
+          id, quantity, unit_cost, line_total, product_id,
+          tax_rate, tax_amount, tax_category_code,
+          products(name, efris_product_code)
+        `)
         .eq('purchase_id', purchaseId)
         .order('created_at');
 
       if (itemsData) {
         setItems(itemsData.map((i: any) => ({
           id: i.id,
+          product_id: i.product_id,
           product_name: i.products?.name || 'Unknown Product',
+          efris_product_code: i.products?.efris_product_code || null,
           quantity: i.quantity,
           unit_cost: Number(i.unit_cost),
           line_total: Number(i.line_total),
+          tax_rate: i.tax_rate || 0,
+          tax_amount: i.tax_amount || 0,
+          tax_category: i.tax_category_code || '01',
         })));
       }
     } catch (e: any) {
       console.error('Error loading purchase:', e);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const syncToEfris = async () => {
+    if (!purchase || !business || !business.efris_api_key) {
+      Alert.alert('Configuration Missing', 'EFRIS is not configured for this business.');
+      return;
+    }
+    const unregistered = items.filter(i => !i.efris_product_code);
+    if (unregistered.length > 0) {
+      Alert.alert('Registration Needed', `Some products are not registered with EFRIS: ${unregistered.map(u => u.product_name).join(', ')}. Register them first.`);
+      return;
+    }
+
+    setSyncing(true);
+    try {
+      const config: EfrisConfig = {
+        apiKey: business.efris_api_key,
+        apiUrl: business.efris_api_url || '',
+        testMode: business.efris_test_mode ?? true,
+      };
+
+      const today = new Date().toISOString().split('T')[0];
+      const result = await submitStockIncrease(config, {
+        goodsStockIn: {
+          operationType: '101',
+          supplierName: purchase.supplier_name || 'Unknown',
+          supplierTin: purchase.supplier_tin || '',
+          stockInType: '101',
+          stockInDate: today,
+          remarks: `Manual Sync of Purchase: ${purchase.id}`,
+          goodsTypeCode: '101',
+        },
+        goodsStockInItem: items.map(i => ({
+          goodsCode: i.efris_product_code!,
+          quantity: i.quantity.toString(),
+          unitPrice: i.unit_cost.toString(),
+        })),
+      });
+
+      if (result.success) {
+        await supabase.from('purchases').update({
+          efris_submitted: true,
+          efris_submitted_at: new Date().toISOString(),
+        }).eq('id', purchase.id);
+        
+        Alert.alert('✅ Success', 'Stock increase successfully submitted to EFRIS.');
+        loadPurchase();
+      } else {
+        Alert.alert('EFRIS Error', result.error || 'Failed to sync with EFRIS.');
+      }
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Something went wrong during EFRIS sync.');
+    } finally {
+      setSyncing(false);
     }
   };
 
@@ -188,23 +262,30 @@ export default function PurchaseDetailScreen() {
             <Text style={styles.itemName}>{idx + 1}. {item.product_name}</Text>
             <Text style={styles.itemTotal}>{fmt(item.line_total)}</Text>
           </View>
-          <Text style={styles.itemDetails}>
-            {item.quantity} × {fmt(item.unit_cost)}
-          </Text>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4, backgroundColor: 'transparent' }}>
+            <Text style={styles.itemDetails}>
+              {item.quantity} × {fmt(item.unit_cost)}
+            </Text>
+            {item.tax_amount > 0 && (
+              <Text style={{ fontSize: 11, color: '#aaa' }}>VAT: {fmt(item.tax_amount)} ({item.tax_rate}%)</Text>
+            )}
+          </View>
         </View>
       ))}
 
       {/* Totals */}
       <View style={styles.totalsCard}>
         <Text style={styles.sectionTitle}>Summary</Text>
-        {items.length > 1 && items.map((item, idx) => (
-          <View key={item.id} style={styles.totalRow}>
-            <Text style={styles.totalLabel} numberOfLines={1}>{item.product_name}</Text>
-            <Text style={styles.totalValue}>{fmt(item.line_total)}</Text>
-          </View>
-        ))}
+        <View style={styles.totalRow}>
+          <Text style={styles.totalLabel}>Subtotal</Text>
+          <Text style={styles.totalValue}>{fmt(purchase.subtotal_amount)}</Text>
+        </View>
+        <View style={styles.totalRow}>
+          <Text style={styles.totalLabel}>Total VAT</Text>
+          <Text style={styles.totalValue}>{fmt(purchase.vat_amount)}</Text>
+        </View>
         <View style={[styles.totalRow, styles.totalRowFinal]}>
-          <Text style={styles.totalFinalLabel}>Total Cost</Text>
+          <Text style={styles.totalFinalLabel}>Grand Total</Text>
           <Text style={styles.totalFinalValue}>{fmt(purchase.total_amount)}</Text>
         </View>
         <View style={styles.totalRow}>
@@ -215,19 +296,26 @@ export default function PurchaseDetailScreen() {
 
       {/* Actions */}
       <View style={styles.actions}>
+        {!purchase.efris_submitted && business?.is_efris_enabled && (
+           <TouchableOpacity
+            style={[styles.actionBtn, { backgroundColor: '#7C3AED' }]}
+            onPress={syncToEfris}
+            disabled={syncing}
+          >
+            {syncing ? <ActivityIndicator color="#fff" size="small" /> : (
+              <>
+                <FontAwesome name="cloud-upload" size={16} color="#fff" />
+                <Text style={styles.actionText}>Sync Stock to EFRIS</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        )}
         <TouchableOpacity
           style={styles.actionBtn}
           onPress={() => router.push('/purchase-history' as any)}
         >
           <FontAwesome name="list" size={16} color="#fff" />
           <Text style={styles.actionText}>All Purchases</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.actionBtn, { backgroundColor: '#4CAF50' }]}
-          onPress={() => router.push('/purchases' as any)}
-        >
-          <FontAwesome name="plus" size={16} color="#fff" />
-          <Text style={styles.actionText}>New Purchase</Text>
         </TouchableOpacity>
       </View>
 

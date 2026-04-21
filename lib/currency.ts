@@ -2,6 +2,7 @@
  * Currency Utilities — format, convert, and manage currencies
  */
 import { supabase } from './supabase';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export type Currency = {
   code: string;
@@ -62,52 +63,95 @@ export function formatCurrencyCompact(amount: number, currencyCode: string = 'UG
   return `${cur.symbol} ${formatted}`;
 }
 
-/** Load exchange rate for a pair on a specific date */
+// ─── Real-time Exchange Rates (API) ───
+
+const RATE_CACHE_KEY = 'currency_rates_cache_';
+const CACHE_TTL = 3600 * 1000 * 24; // 24 hours
+
+export async function fetchLiveRates(baseCurrency: string = 'UGX'): Promise<Record<string, number>> {
+  try {
+    // Check cache
+    const cached = await AsyncStorage.getItem(RATE_CACHE_KEY + baseCurrency);
+    if (cached) {
+      const { rates, timestamp } = JSON.parse(cached);
+      if (Date.now() - timestamp < CACHE_TTL) {
+        return rates;
+      }
+    }
+
+    // Fetch new rates (ExchangeRate-API v6 Open Endpoint)
+    console.log(`[Currency] Fetching live rates for ${baseCurrency}...`);
+    const resp = await fetch(`https://open.er-api.com/v6/latest/${baseCurrency}`);
+    const data = await resp.json();
+
+    if (data.result === 'success') {
+      const rates = data.rates;
+      await AsyncStorage.setItem(RATE_CACHE_KEY + baseCurrency, JSON.stringify({
+        rates,
+        timestamp: Date.now()
+      }));
+      return rates;
+    }
+    throw new Error(data['error-type'] || 'Failed to fetch rates');
+  } catch (e) {
+    console.error('Rate fetch error:', e);
+    // Fallback to old cache if available even if expired, or return empty
+    const old = await AsyncStorage.getItem(RATE_CACHE_KEY + baseCurrency);
+    return old ? JSON.parse(old).rates : {};
+  }
+}
+
+/** Get exchange rate from base to target (Live API first, then DB fallback) */
 export async function getExchangeRate(
   businessId: string,
   from: string,
   to: string,
-  date?: string
-): Promise<number | null> {
+): Promise<number> {
   if (from === to) return 1;
-  const d = date || new Date().toISOString().split('T')[0];
+
+  // 1. Try real-time API
+  const rates = await fetchLiveRates(from);
+  if (rates[to]) return rates[to];
+
+  // 2. Try DB fallback
   const { data } = await supabase
     .from('exchange_rates')
     .select('rate')
     .eq('business_id', businessId)
     .eq('from_currency', from)
     .eq('to_currency', to)
-    .lte('effective_date', d)
     .order('effective_date', { ascending: false })
     .limit(1)
     .single();
-  return data?.rate ?? null;
+
+  if (data?.rate) return data.rate;
+
+  // 3. Try inverse DB fallback
+  const { data: inv } = await supabase
+    .from('exchange_rates')
+    .select('rate')
+    .eq('business_id', businessId)
+    .eq('from_currency', to)
+    .eq('to_currency', from)
+    .order('effective_date', { ascending: false })
+    .limit(1)
+    .single();
+
+  if (inv?.rate) return 1 / inv.rate;
+
+  return 1; // Last resort
 }
 
-/** Convert an amount between currencies using stored rates */
+/** Convert amount between currencies using best available rate */
 export async function convertCurrency(
   businessId: string,
   amount: number,
   from: string,
   to: string,
-  date?: string
-): Promise<{ converted: number; rate: number } | null> {
+): Promise<{ converted: number; rate: number }> {
   if (from === to) return { converted: amount, rate: 1 };
-
-  // Try direct rate
-  let rate = await getExchangeRate(businessId, from, to, date);
-  if (rate !== null) {
-    return { converted: amount * rate, rate };
-  }
-
-  // Try inverse rate
-  const inverse = await getExchangeRate(businessId, to, from, date);
-  if (inverse !== null && inverse > 0) {
-    rate = 1 / inverse;
-    return { converted: amount * rate, rate };
-  }
-
-  return null;
+  const rate = await getExchangeRate(businessId, from, to);
+  return { converted: amount * rate, rate };
 }
 
 /** Save an exchange rate */

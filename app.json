@@ -2,7 +2,7 @@
   "expo": {
     "name": "YourBooks Pos",
     "slug": "yourbooks-lite",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "yourbookslite",
@@ -25,7 +25,7 @@
       "softwareKeyboardLayoutMode": "pan",
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "versionCode": 3,
+      "versionCode": 4,
       "package": "com.yourbooks.lite",
       "permissions": [
         "android.permission.CAMERA",

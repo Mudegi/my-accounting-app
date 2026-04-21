@@ -22,7 +22,14 @@ export type ReceiptData = {
   // Business info
   businessName: string;
   businessTin?: string | null;
+  businessEmail?: string | null;
+  businessPhone?: string | null;
+  businessAddress?: string | null;
+  logoUrl?: string | null;
   branchName: string;
+  branchPhone?: string | null;
+  branchLocation?: string | null;
+  footerMessage?: string | null;
 
   // Sale info
   saleId: string;
@@ -54,6 +61,35 @@ export type ReceiptData = {
   customerTin?: string | null;
 
   // Currency display
+  currencySymbol?: string;
+
+  // Partial payment info
+  amountPaid?: number;
+  balanceDue?: number;
+};
+
+export type StatementEntry = {
+  date: string;
+  type: 'sale' | 'payment';
+  description: string;
+  debit: number; // For sales
+  credit: number; // For payments
+  balance: number;
+  items?: string; // e.g. "2x Soap, 1x Sugar"
+};
+
+export type StatementData = {
+  businessName: string;
+  businessTin?: string | null;
+  businessPhone?: string | null;
+  businessAddress?: string | null;
+  customerName: string;
+  customerPhone?: string | null;
+  startDate: string;
+  endDate: string;
+  openingBalance: number;
+  entries: StatementEntry[];
+  closingBalance: number;
   currencySymbol?: string;
 };
 
@@ -282,11 +318,25 @@ export async function generateReceiptHtml(data: ReceiptData): Promise<string> {
     ${qrSvg ? `<div class="qr-wrapper">${qrSvg}<div class="qr-label">Scan to verify on URA portal</div></div>` : ''}` : '';
 
   // ── NON-EFRIS simple receipt sections ──
+  const address = data.branchLocation || data.businessAddress;
+  const phone = data.branchPhone || data.businessPhone;
+  const email = data.businessEmail;
+  const tin = data.businessTin;
+  const footer = data.footerMessage || 'Thank you for your purchase!';
+
   const simpleHeader = !efris ? `
     <div class="header">
-      <div class="biz-name">${data.businessName}</div>
-      ${data.businessTin ? `<div class="biz-info">TIN: ${data.businessTin}</div>` : ''}
+      <div class="header-main">
+        ${data.logoUrl ? `<img src="${data.logoUrl}" class="logo" />` : ''}
+        <div class="biz-name">${data.businessName}</div>
+      </div>
+      ${tin ? `<div class="biz-info">TIN: ${tin}</div>` : ''}
       <div class="biz-info">${data.branchName}</div>
+      ${address ? `<div class="biz-info">${address}</div>` : ''}
+      ${phone ? `<div class="biz-info">Tel: ${phone}</div>` : ''}
+      ${email ? `<div class="biz-info">${email}</div>` : ''}
+      <div class="biz-info">CURRENCY: ${cur}</div>
+      <div class="invoice-title">SALES INVOICE</div>
     </div>
     <div class="meta">
       <div class="meta-row"><span>Date:</span><span>${formatDate(data.date)}</span></div>
@@ -301,6 +351,10 @@ export async function generateReceiptHtml(data: ReceiptData): Promise<string> {
       ${data.discountAmount > 0 ? `<div class="total-row"><span>Discount</span><span>-${cur} ${fmt(data.discountAmount)}</span></div>` : ''}
       <div class="total-row"><span>Tax</span><span>${cur} ${fmt(data.taxAmount)}</span></div>
       <div class="total-row grand-total"><span>TOTAL</span><span>${cur} ${fmt(data.totalAmount)}</span></div>
+      ${data.amountPaid !== undefined && data.amountPaid > 0 ? `
+        <div class="total-row"><span>Amount Paid</span><span>${cur} ${fmt(data.amountPaid)}</span></div>
+        <div class="total-row" style="font-weight: bold;"><span>BALANCE DUE</span><span>${cur} ${fmt(data.balanceDue || 0)}</span></div>
+      ` : ''}
     </div>
     <div class="payment">Payment: ${paymentLabel(data.paymentMethod)}</div>` : '';
 
@@ -323,8 +377,11 @@ export async function generateReceiptHtml(data: ReceiptData): Promise<string> {
     background: #fff;
   }
   .header { text-align: center; margin-bottom: 4px; padding-bottom: 4px; border-bottom: 1px dashed #000; }
+  .header-main { display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 8px; margin-bottom: 4px; }
+  .logo { height: 40px; width: auto; object-fit: contain; }
   .biz-name { font-size: 15px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; }
-  .biz-info { font-size: 9px; color: #333; margin-top: 1px; }
+  .biz-info { font-size: 10px; color: #000; margin-top: 2px; }
+  .invoice-title { font-size: 12px; font-weight: bold; margin-top: 8px; text-decoration: underline; }
   .efris-header {
     text-align: center; font-size: 11px; font-weight: bold; letter-spacing: 0.5px;
     padding: 4px 0; margin-bottom: 2px;
@@ -404,7 +461,7 @@ ${efris ? `
 `}
 
   <div class="footer">
-    <div class="footer-thanks">Thank you for your purchase!</div>
+    <div class="footer-thanks">${footer}</div>
     <div class="footer-powered">Powered by YourBooks Lite</div>
   </div>
 
@@ -430,6 +487,135 @@ export async function shareReceiptPdf(data: ReceiptData): Promise<void> {
     await Sharing.shareAsync(uri, {
       mimeType: 'application/pdf',
       dialogTitle: 'Share Receipt',
+      UTI: 'com.adobe.pdf',
+    });
+  }
+}
+
+/**
+ * Generate Statement HTML
+ */
+export async function generateStatementHtml(data: StatementData): Promise<string> {
+  const cur = data.currencySymbol || 'UGX';
+  
+  const entriesHtml = data.entries.map(e => `
+    <tr>
+      <td style="font-size: 8px;">${e.date.split('T')[0]}</td>
+      <td>
+        <div style="font-weight: bold;">${e.description}</div>
+        ${e.items ? `<div style="font-size: 8px; color: #555;">${e.items}</div>` : ''}
+      </td>
+      <td class="r">${e.debit > 0 ? fmt(e.debit) : '-'}</td>
+      <td class="r">${e.credit > 0 ? fmt(e.credit) : '-'}</td>
+      <td class="r" style="font-weight: bold;">${fmt(e.balance)}</td>
+    </tr>
+  `).join('');
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  @page { margin: 10mm; size: A4; }
+  body { font-family: 'Helvetica', sans-serif; font-size: 10px; color: #333; line-height: 1.4; padding: 20px; }
+  .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #000; padding-bottom: 10px; }
+  .title { font-size: 18px; font-weight: bold; text-transform: uppercase; margin-bottom: 5px; }
+  .biz-info { font-size: 11px; }
+  
+  .details-box { display: flex; justify-content: space-between; margin-bottom: 20px; }
+  .customer-box { width: 45%; }
+  .period-box { width: 45%; text-align: right; }
+  .label { font-weight: bold; color: #666; font-size: 9px; text-transform: uppercase; }
+  .val { font-size: 12px; font-weight: bold; }
+
+  table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+  th { background: #f0f0f0; padding: 8px 4px; text-align: left; border-bottom: 1px solid #000; font-size: 9px; }
+  td { padding: 8px 4px; border-bottom: 1px solid #eee; vertical-align: top; }
+  .r { text-align: right; }
+  
+  .summary { margin-top: 20px; border-top: 2px solid #000; padding-top: 10px; display: flex; justify-content: flex-end; }
+  .summary-row { display: flex; width: 250px; justify-content: space-between; padding: 4px 0; }
+  .summary-label { font-weight: bold; }
+  .summary-val { font-weight: bold; font-size: 14px; }
+  
+  .footer { margin-top: 40px; text-align: center; border-top: 1px dashed #ccc; padding-top: 10px; color: #888; }
+</style>
+</head>
+<body>
+  <div class="header">
+    <div class="title">STATEMENT OF ACCOUNT</div>
+    <div class="biz-info">
+      <strong>${data.businessName}</strong><br/>
+      ${data.businessTin ? `TIN: ${data.businessTin} | ` : ''}
+      ${data.businessPhone ? `Tel: ${data.businessPhone} | ` : ''}
+      ${data.businessAddress ? `Address: ${data.businessAddress}` : ''}
+    </div>
+  </div>
+
+  <div class="details-box">
+    <div class="customer-box">
+      <div class="label">Bill To:</div>
+      <div class="val">${data.customerName}</div>
+      ${data.customerPhone ? `<div>${data.customerPhone}</div>` : ''}
+    </div>
+    <div class="period-box">
+      <div class="label">Statement Period:</div>
+      <div class="val">${data.startDate} to ${data.endDate}</div>
+      <div style="margin-top: 10px;">
+        <div class="label">Opening Balance:</div>
+        <div class="val">${cur} ${fmt(data.openingBalance)}</div>
+      </div>
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 70px;">DATE</th>
+        <th>DESCRIPTION</th>
+        <th class="r" style="width: 80px;">DEBIT (+)</th>
+        <th class="r" style="width: 80px;">CREDIT (-)</th>
+        <th class="r" style="width: 100px;">BALANCE (${cur})</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td colspan="4" style="font-weight: bold;">OPENING BALANCE</td>
+        <td class="r" style="font-weight: bold;">${fmt(data.openingBalance)}</td>
+      </tr>
+      ${entriesHtml}
+    </tbody>
+  </table>
+
+  <div class="summary">
+    <div style="width: 100%;">
+      <div class="summary-row" style="margin-left: auto;">
+        <span class="summary-label">Closing Balance:</span>
+        <span class="summary-val">${cur} ${fmt(data.closingBalance)}</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <p>Please clear any outstanding balances as soon as possible.</p>
+    <p style="font-size: 8px; margin-top: 5px;">Generated by YourBooks Lite</p>
+  </div>
+</body>
+</html>`;
+}
+
+export async function printStatement(data: StatementData): Promise<void> {
+  const html = await generateStatementHtml(data);
+  await Print.printAsync({ html });
+}
+
+export async function shareStatementPdf(data: StatementData): Promise<void> {
+  const html = await generateStatementHtml(data);
+  const { uri } = await Print.printToFileAsync({ html });
+  if (await Sharing.isAvailableAsync()) {
+    await Sharing.shareAsync(uri, {
+      mimeType: 'application/pdf',
+      dialogTitle: 'Share Statement',
       UTI: 'com.adobe.pdf',
     });
   }

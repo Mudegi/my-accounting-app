@@ -9,7 +9,9 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Image,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { Text, View } from '@/components/Themed';
 import { useAuth } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
@@ -18,6 +20,7 @@ import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { statusLabel, statusColor, trialDaysRemaining } from '@/lib/subscription';
 import { getBusinessSessions, removeOtherSession, getDeviceId, type DeviceSession } from '@/lib/device-sessions';
+import { loadCurrencies, type Currency } from '@/lib/currency';
 
 export default function SettingsScreen() {
   const { profile, business, branches, currentBranch, setCurrentBranch, signOut, refreshBusiness, reloadUserData, subscriptionStatus, currency, isSuperAdmin, changePassword } = useAuth();
@@ -34,10 +37,46 @@ export default function SettingsScreen() {
   const [loadingDevices, setLoadingDevices] = useState(false);
   const [currentDeviceId, setCurrentDeviceId] = useState<string>('');
 
+  // Business Profile states
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [editBusinessName, setEditBusinessName] = useState(business?.name || '');
+  const [editTin, setEditTin] = useState(business?.tin || '');
+  const [editPhone, setEditPhone] = useState(business?.phone || '');
+  const [editEmail, setEditEmail] = useState(business?.email || '');
+  const [editAddress, setEditAddress] = useState(business?.address || '');
+  const [editReceiptFooter, setEditReceiptFooter] = useState(business?.receipt_footer || '');
+  const [editFullName, setEditFullName] = useState(profile?.full_name || '');
+  const [editFiscalMonth, setEditFiscalMonth] = useState(1);
+  const [editDefaultCurrency, setEditDefaultCurrency] = useState(business?.default_currency || 'UGX');
+  const [editCountry, setEditCountry] = useState(business?.country || '');
+  const [availableCurrencies, setAvailableCurrencies] = useState<Currency[]>([]);
+  const [logoUrl, setLogoUrl] = useState(business?.logo_url || null);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+
   useEffect(() => {
     AsyncStorage.getItem('auto_print').then(v => setAutoPrint(v === 'true'));
     getDeviceId().then(id => setCurrentDeviceId(id));
+    loadCurrencies().then(setAvailableCurrencies);
   }, []);
+
+  useEffect(() => {
+    if (business && !isEditingProfile) {
+      setEditBusinessName(business.name);
+      setEditTin(business.tin || '');
+      setEditPhone(business.phone || '');
+      setEditEmail(business.email || '');
+      setEditAddress(business.address || '');
+      setEditReceiptFooter(business.receipt_footer || '');
+      setEditFiscalMonth(business.fiscal_year_start_month || 1);
+      setEditDefaultCurrency(business.default_currency || 'UGX');
+      setEditCountry(business.country || '');
+      setLogoUrl(business.logo_url || null);
+    }
+    if (profile && !isEditingProfile) {
+      setEditFullName(profile.full_name || '');
+    }
+  }, [business, profile, isEditingProfile]);
 
   const loadDevices = async () => {
     if (!business) return;
@@ -96,6 +135,98 @@ export default function SettingsScreen() {
       { text: 'Cancel', style: 'cancel' },
       { text: 'Sign Out', style: 'destructive', onPress: signOut },
     ]);
+  };
+
+  const pickLogo = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.5,
+    });
+
+    if (!result.canceled && result.assets[0].uri && business) {
+      setUploadingLogo(true);
+      try {
+        const uri = result.assets[0].uri;
+        const ext = uri.split('.').pop();
+        const path = `${business.id}/logo_${Date.now()}.${ext}`;
+
+        const formData = new FormData();
+        formData.append('file', {
+          uri,
+          name: path,
+          type: `image/${ext}`,
+        } as any);
+
+        const { data, error } = await supabase.storage
+          .from('business-logos')
+          .upload(path, formData);
+
+        if (error) throw error;
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('business-logos')
+          .getPublicUrl(path);
+
+        // Update database
+        const { error: dbErr } = await supabase
+          .from('businesses')
+          .update({ logo_url: publicUrl })
+          .eq('id', business.id);
+        
+        if (dbErr) throw dbErr;
+
+        setLogoUrl(publicUrl);
+        await refreshBusiness();
+        Alert.alert('Success', 'Logo updated successfully');
+      } catch (e: any) {
+        Alert.alert('Upload Error', e.message);
+      } finally {
+        setUploadingLogo(false);
+      }
+    }
+  };
+
+  const handleSaveProfile = async () => {
+    if (!profile || !business) return;
+    setSavingProfile(true);
+    try {
+      // 1. Update Profile (Full Name)
+      const { error: pErr } = await supabase
+        .from('profiles')
+        .update({ full_name: editFullName })
+        .eq('id', profile.id);
+      
+      if (pErr) throw pErr;
+
+      // 2. Update Business
+      const { error: bErr } = await supabase
+        .from('businesses')
+        .update({
+          name: editBusinessName,
+          tin: editTin,
+          phone: editPhone,
+          email: editEmail,
+          address: editAddress,
+          receipt_footer: editReceiptFooter,
+          fiscal_year_start_month: editFiscalMonth,
+          default_currency: editDefaultCurrency,
+          country: editCountry,
+        })
+        .eq('id', business.id);
+      
+      if (bErr) throw bErr;
+
+      await refreshBusiness();
+      await reloadUserData();
+      setIsEditingProfile(false);
+      Alert.alert('Success', 'Business profile updated successfully.');
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Failed to update profile');
+    } finally {
+      setSavingProfile(false);
+    }
   };
 
   const handleChangePassword = async () => {
@@ -192,6 +323,191 @@ export default function SettingsScreen() {
           <Text style={{ color: '#ccc', fontSize: 14 }}>Currency: <Text style={{ color: '#fff', fontWeight: '600' }}>{currency.symbol} ({currency.code})</Text></Text>
         </View>
       </View>
+      )}
+
+      {/* Business & Profile — admin only */}
+      {isAdmin && (
+        <View style={styles.section}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, backgroundColor: 'transparent' }}>
+            <Text style={styles.sectionTitle}>Business & Profile</Text>
+            <TouchableOpacity onPress={() => setIsEditingProfile(!isEditingProfile)}>
+              <Text style={{ color: '#e94560', fontWeight: 'bold' }}>{isEditingProfile ? 'Cancel' : 'Edit'}</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Business Logo Upload */}
+          <View style={styles.logoSection}>
+            <TouchableOpacity style={styles.logoWrapper} onPress={pickLogo} disabled={uploadingLogo}>
+              {uploadingLogo ? (
+                <ActivityIndicator color="#e94560" />
+              ) : logoUrl ? (
+                <Image source={{ uri: logoUrl }} style={styles.logoImage} />
+              ) : (
+                <View style={styles.logoPlaceholder}>
+                  <FontAwesome name="camera" size={24} color="#555" />
+                </View>
+              )}
+            </TouchableOpacity>
+            <View style={{ flex: 1, backgroundColor: 'transparent' }}>
+              <Text style={{ color: '#fff', fontSize: 16, fontWeight: 'bold' }}>Business Logo</Text>
+              <Text style={{ color: '#aaa', fontSize: 12 }}>Visible on statements & receipts</Text>
+              <TouchableOpacity onPress={pickLogo} disabled={uploadingLogo}>
+                <Text style={{ color: '#e94560', fontSize: 13, marginTop: 4, fontWeight: '600' }}>
+                  {logoUrl ? 'Change Logo' : 'Upload Logo'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {isEditingProfile ? (
+            <View style={{ backgroundColor: 'transparent', gap: 12 }}>
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Admin Full Name</Text>
+                <TextInput
+                  style={styles.input}
+                  value={editFullName}
+                  onChangeText={setEditFullName}
+                  placeholder="Your Name"
+                  placeholderTextColor="#666"
+                />
+              </View>
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Business Name</Text>
+                <TextInput
+                  style={styles.input}
+                  value={editBusinessName}
+                  onChangeText={setEditBusinessName}
+                  placeholder="Business Name"
+                  placeholderTextColor="#666"
+                />
+              </View>
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Base Country</Text>
+                <TextInput
+                  style={styles.input}
+                  value={editCountry}
+                  onChangeText={setEditCountry}
+                  placeholder="e.g. Uganda"
+                  placeholderTextColor="#666"
+                />
+              </View>
+              {business?.is_efris_enabled && (
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>TIN (Tax ID)</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={editTin}
+                    onChangeText={setEditTin}
+                    placeholder="e.g. 10xxxxxxxx"
+                    placeholderTextColor="#666"
+                  />
+                </View>
+              )}
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Official Phone</Text>
+                <TextInput
+                  style={styles.input}
+                  value={editPhone}
+                  onChangeText={setEditPhone}
+                  placeholder="Business Phone"
+                  placeholderTextColor="#666"
+                  keyboardType="phone-pad"
+                />
+              </View>
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Official Email</Text>
+                <TextInput
+                  style={styles.input}
+                  value={editEmail}
+                  onChangeText={setEditEmail}
+                  placeholder="Business Email"
+                  placeholderTextColor="#666"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                />
+              </View>
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Head Office Location / Address</Text>
+                <TextInput
+                  style={styles.input}
+                  value={editAddress}
+                  onChangeText={setEditAddress}
+                  placeholder="e.g. Street Name, City"
+                  placeholderTextColor="#666"
+                  multiline
+                />
+              </View>
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Receipt Footer Message</Text>
+                <TextInput
+                  style={styles.input}
+                  value={editReceiptFooter}
+                  onChangeText={setEditReceiptFooter}
+                  placeholder="e.g. Thank you for your purchase!"
+                  placeholderTextColor="#666"
+                  multiline
+                />
+              </View>
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Fiscal Year Start Month</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
+                  {['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].map((m, i) => (
+                    <TouchableOpacity 
+                      key={m} 
+                      onPress={() => setEditFiscalMonth(i + 1)}
+                      style={{ paddingHorizontal: 12, paddingVertical: 8, backgroundColor: editFiscalMonth === i + 1 ? '#e94560' : '#222', marginRight: 8, borderRadius: 6 }}
+                    >
+                      <Text style={{ color: '#fff' }}>{m}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Business Default Currency</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
+                  {availableCurrencies.map((c) => (
+                    <TouchableOpacity 
+                      key={c.code} 
+                      onPress={() => setEditDefaultCurrency(c.code)}
+                      style={{ paddingHorizontal: 12, paddingVertical: 8, backgroundColor: editDefaultCurrency === c.code ? '#4CAF50' : '#222', marginRight: 8, borderRadius: 6 }}
+                    >
+                      <Text style={{ color: '#fff', fontSize: 13, fontWeight: '600' }}>{c.symbol} ({c.code})</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+                <Text style={{ color: '#888', fontSize: 11, marginTop: 4 }}>Used for all pricing and base accounting reports</Text>
+              </View>
+
+              <TouchableOpacity
+                style={[styles.saveBtn, savingProfile && { opacity: 0.7 }]}
+                onPress={handleSaveProfile}
+                disabled={savingProfile}
+              >
+                {savingProfile ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.saveBtnText}>Save Changes</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={{ backgroundColor: 'transparent', gap: 8 }}>
+              <InfoRow icon="user" label="Admin Name" value={profile?.full_name} />
+              <InfoRow icon="globe" label="Country" value={business?.country || 'Not set'} />
+              <InfoRow icon="building" label="Business" value={business?.name} />
+              {business?.is_efris_enabled && <InfoRow icon="id-card" label="TIN" value={business?.tin || 'Not set'} />}
+              <InfoRow icon="phone" label="Phone" value={business?.phone || 'Not set'} />
+              <InfoRow icon="envelope" label="Email" value={business?.email || 'Not set'} />
+              <InfoRow icon="map-marker" label="Location" value={business?.address || 'Not set'} />
+              <InfoRow icon="sticky-note" label="Footer" value={business?.receipt_footer || 'Default'} />
+              <InfoRow 
+                 icon="calendar" 
+                 label="Fiscal Year Start" 
+                 value={['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][(business?.fiscal_year_start_month || 1) - 1]} 
+               />
+            </View>
+          )}
+        </View>
       )}
 
       {/* Platform Admin — super admins only */}
@@ -330,6 +646,13 @@ export default function SettingsScreen() {
             <Text style={styles.menuLabel}>Product Categories</Text>
             <FontAwesome name="chevron-right" size={14} color="#555" />
           </TouchableOpacity>
+          {business?.is_efris_enabled && (
+            <TouchableOpacity style={styles.menuRow} onPress={() => router.push('/tax-settings' as any)}>
+              <FontAwesome name="percent" size={18} color="#aaa" />
+              <Text style={styles.menuLabel}>Tax Configurations</Text>
+              <FontAwesome name="chevron-right" size={14} color="#555" />
+            </TouchableOpacity>
+          )}
         </View>
       )}
 
@@ -563,6 +886,13 @@ export default function SettingsScreen() {
   );
 }
 
+const InfoRow = ({ icon, label, value }: { icon: string, label: string, value?: string | null }) => (
+  <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 6, backgroundColor: 'transparent' }}>
+    <FontAwesome name={icon as any} size={14} color="#666" style={{ width: 20 }} />
+    <Text style={{ color: '#aaa', fontSize: 13, flex: 1 }}>{label}: <Text style={{ color: '#fff' }}>{value || '-'}</Text></Text>
+  </View>
+);
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#1a1a2e' },
   profileCard: {
@@ -590,6 +920,37 @@ const styles = StyleSheet.create({
   },
   avatarText: { fontSize: 28, fontWeight: 'bold', color: '#fff' },
   profileInfo: { flex: 1, backgroundColor: 'transparent' },
+  sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#fff', marginBottom: 10 },
+  logoSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    marginBottom: 20,
+    padding: 12,
+    backgroundColor: '#16213e',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#0f3460',
+  },
+  logoWrapper: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: '#0f3460',
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: '#1a1a2e',
+  },
+  logoImage: {
+    width: '100%',
+    height: '100%',
+  },
+  logoPlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   profileName: { fontSize: 20, fontWeight: 'bold', color: '#fff' },
   profileRole: { fontSize: 12, color: '#e94560', fontWeight: 'bold', marginTop: 2 },
   businessName: { fontSize: 13, color: '#aaa', marginTop: 4 },
@@ -600,7 +961,12 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
   },
-  sectionTitle: { fontSize: 12, color: '#666', fontWeight: 'bold', marginBottom: 12, letterSpacing: 1 },
+  sectionTitle: { fontSize: 16, color: '#fff', fontWeight: 'bold' },
+  inputGroup: { marginTop: 8, backgroundColor: 'transparent' },
+  inputLabel: { color: '#aaa', fontSize: 12, marginBottom: 4 },
+  input: { backgroundColor: '#0f3460', borderRadius: 10, padding: 12, color: '#fff', fontSize: 14 },
+  saveBtn: { backgroundColor: '#e94560', borderRadius: 12, padding: 14, alignItems: 'center', marginTop: 12 },
+  saveBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 15 },
   branchRow: {
     flexDirection: 'row',
     alignItems: 'center',

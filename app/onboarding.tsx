@@ -21,6 +21,25 @@ import { formatCurrency } from '@/lib/currency';
 
 type Step = 'business' | 'currency' | 'plan';
 
+const COUNTRIES = [
+  { name: 'Uganda', currency: 'UGX' },
+  { name: 'Kenya', currency: 'KES' },
+  { name: 'Tanzania', currency: 'TZS' },
+  { name: 'Rwanda', currency: 'RWF' },
+  { name: 'Burundi', currency: 'BIF' },
+  { name: 'South Sudan', currency: 'SSP' },
+  { name: 'DR Congo', currency: 'CDF' },
+  { name: 'Nigeria', currency: 'NGN' },
+  { name: 'Ghana', currency: 'GHS' },
+  { name: 'South Africa', currency: 'ZAR' },
+  { name: 'Ethiopia', currency: 'ETB' },
+  { name: 'Somalia', currency: 'SOS' },
+  { name: 'United Kingdom', currency: 'GBP' },
+  { name: 'USA', currency: 'USD' },
+  { name: 'UAE', currency: 'AED' },
+  { name: 'Other', currency: 'USD' },
+];
+
 export default function OnboardingScreen() {
   const { business, refreshBusiness, refreshSubscription, reloadUserData } = useAuth();
   const router = useRouter();
@@ -29,6 +48,7 @@ export default function OnboardingScreen() {
   const [saving, setSaving] = useState(false);
 
   // Step 1: Business details
+  const [bizCountry, setBizCountry] = useState(business?.country || '');
   const [bizName, setBizName] = useState(business?.name || '');
   const [bizPhone, setBizPhone] = useState('');
   const [bizAddress, setBizAddress] = useState('');
@@ -57,6 +77,10 @@ export default function OnboardingScreen() {
   const otherCurrencies = currencies.filter((c) => !POPULAR_CURRENCIES.includes(c.code));
 
   const saveBusinessDetails = async () => {
+    if (!bizCountry) {
+      Alert.alert('Required', 'Please select your business country');
+      return;
+    }
     if (!bizName.trim()) {
       Alert.alert('Required', 'Please enter your business name');
       return;
@@ -65,6 +89,7 @@ export default function OnboardingScreen() {
     const { error } = await supabase
       .from('businesses')
       .update({
+        country: bizCountry,
         name: bizName.trim(),
         phone: bizPhone.trim() || null,
         address: bizAddress.trim() || null,
@@ -104,7 +129,7 @@ export default function OnboardingScreen() {
     try {
       // Create subscription (trial)
       const plan = plans.find((p) => p.id === selectedPlan);
-      const trialDays = plan?.trial_days || 7;
+      const trialDays = plan?.trial_days || 30;
       const periodEnd = new Date();
       periodEnd.setDate(periodEnd.getDate() + (trialDays > 0 ? trialDays : 30));
 
@@ -161,7 +186,25 @@ export default function OnboardingScreen() {
         {step === 'business' && (
           <>
             <Text style={styles.title}>Set Up Your Business</Text>
-            <Text style={styles.subtitle}>Tell us about your business</Text>
+            <Text style={styles.subtitle}>Tell us about your business baseline</Text>
+
+            <Text style={styles.label}>Select Country *</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
+              <View style={styles.countryRow}>
+                {COUNTRIES.map((c) => (
+                  <TouchableOpacity
+                    key={c.name}
+                    style={[styles.countryChip, bizCountry === c.name && styles.countryChipActive]}
+                    onPress={() => {
+                      setBizCountry(c.name);
+                      setSelectedCurrency(c.currency);
+                    }}
+                  >
+                    <Text style={[styles.countryText, bizCountry === c.name && styles.countryTextActive]}>{c.name}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
 
             <Text style={styles.label}>Business Name *</Text>
             <TextInput style={styles.input} value={bizName} onChangeText={setBizName} placeholder="e.g. Kampala Hardware Store" placeholderTextColor="#555" />
@@ -376,4 +419,11 @@ const styles = StyleSheet.create({
   featureItem: { fontSize: 12, color: '#aaa', marginBottom: 3 },
   planLimits: { flexDirection: 'row', gap: 16, marginTop: 10, backgroundColor: 'transparent' },
   planLimit: { fontSize: 12, color: '#aaa' },
+
+  // Country chips
+  countryRow: { flexDirection: 'row', gap: 8, backgroundColor: 'transparent' },
+  countryChip: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10, backgroundColor: '#16213e', borderWidth: 1.5, borderColor: '#0f3460' },
+  countryChipActive: { backgroundColor: '#e94560', borderColor: '#e94560' },
+  countryText: { color: '#888', fontWeight: 'bold', fontSize: 13 },
+  countryTextActive: { color: '#fff' },
 });

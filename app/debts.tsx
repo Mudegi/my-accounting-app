@@ -18,6 +18,8 @@ import { useAuth } from '@/lib/auth';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { postSaleEntry, postSupplierPaymentEntry, postCustomerPaymentEntry, PAYMENT_METHODS, ACC, PAYMENT_ACCOUNT_MAP } from '@/lib/accounting';
+import { printStatement, shareStatementPdf, StatementData, StatementEntry } from '@/lib/receipt';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 type DebtCustomer = {
   id: string;
@@ -36,6 +38,7 @@ type CreditSale = {
   paid: number;
   balance: number;
   status: string;
+  items?: string; // Concise list of items for the history view
 };
 
 type DebtPayment = {
@@ -100,6 +103,16 @@ export default function DebtsScreen() {
   const [showHistory, setShowHistory] = useState(false);
   const [historyPayments, setHistoryPayments] = useState<DebtPayment[]>([]);
   const [historySaleId, setHistorySaleId] = useState<string>('');
+
+  // Account Statement states
+  const [statementView, setStatementView] = useState(false);
+  const [startDate, setStartDate] = useState(new Date(new Date().setDate(new Date().getDate() - 30)));
+  const [endDate, setEndDate] = useState(new Date());
+  const [showStartPicker, setShowStartPicker] = useState(false);
+  const [showEndPicker, setShowEndPicker] = useState(false);
+  const [statementLedger, setStatementLedger] = useState<StatementEntry[]>([]);
+  const [openingBalance, setOpeningBalance] = useState(0);
+  const [loadingStatement, setLoadingStatement] = useState(false);
 
   // ─── Tab toggle: Receivables (customer debts) vs Payables (supplier debts) ────
   const [activeTab, setActiveTab] = useState<'receivables' | 'payables'>('receivables');
@@ -460,10 +473,10 @@ export default function DebtsScreen() {
     setShowSupplierHistory(true);
   };
 
-  // Open customer detail
   const openCustomerDetail = async (customer: DebtCustomer) => {
     setSelectedCustomer(customer);
     setLoadingDetail(true);
+    setStatementView(false); // Default to history
 
     try {
       let query = supabase
@@ -474,7 +487,6 @@ export default function DebtsScreen() {
         .eq('status', 'completed')
         .order('created_at', { ascending: false });
 
-      // For walk-in debts (id starts with "name:"), filter by customer_name
       if (customer.id.startsWith('name:')) {
         const custName = customer.id.replace('name:', '');
         query = query.is('customer_id', null).eq('customer_name', custName);
@@ -488,12 +500,19 @@ export default function DebtsScreen() {
 
       const { data: sales } = await query;
 
-      if (sales) {
+      if (sales && sales.length > 0) {
         const saleIds = sales.map(s => s.id);
-        const { data: payments } = await supabase
-          .from('debt_payments')
-          .select('sale_id, amount')
-          .in('sale_id', saleIds);
+        
+        const [{ data: itemData }, { data: payments }] = await Promise.all([
+          supabase.from('sale_items').select('sale_id, product_name, quantity').in('sale_id', saleIds),
+          supabase.from('debt_payments').select('sale_id, amount').in('sale_id', saleIds)
+        ]);
+
+        const itemsBySale: Record<string, string> = {};
+        itemData?.forEach(it => {
+          const summary = `${it.quantity}x ${it.product_name}`;
+          itemsBySale[it.sale_id] = itemsBySale[it.sale_id] ? `${itemsBySale[it.sale_id]}, ${summary}` : summary;
+        });
 
         const paymentsBySale: Record<string, number> = {};
         payments?.forEach(p => {
@@ -509,16 +528,111 @@ export default function DebtsScreen() {
             paid,
             balance: Number(s.total_amount) - paid,
             status: s.status,
+            items: itemsBySale[s.id] || 'Items not found',
           };
         });
 
         setCreditSales(enriched);
+      } else {
+        setCreditSales([]);
       }
     } catch (err: any) {
       Alert.alert('Error', err.message);
     } finally {
       setLoadingDetail(false);
     }
+  };
+
+  const loadStatement = async () => {
+    if (!selectedCustomer || !business) return;
+    setLoadingStatement(true);
+    try {
+      const isWalkin = selectedCustomer.id.startsWith('name:');
+      const startISO = startDate.toISOString();
+      const endISO = endDate.toISOString();
+
+      // Opening Balance
+      let salesBeforeQuery = supabase.from('sales').select('total_amount').eq('business_id', business.id).eq('payment_method', 'credit').eq('status', 'completed').lt('created_at', startISO);
+      let payBeforeQuery = supabase.from('debt_payments').select('amount').eq('business_id', business.id).lt('created_at', startISO);
+
+      if (isWalkin) {
+        salesBeforeQuery = salesBeforeQuery.is('customer_id', null).eq('customer_name', selectedCustomer.id.replace('name:', ''));
+        payBeforeQuery = payBeforeQuery.is('customer_id', null);
+      } else {
+        salesBeforeQuery = salesBeforeQuery.eq('customer_id', selectedCustomer.id);
+        payBeforeQuery = payBeforeQuery.eq('customer_id', selectedCustomer.id);
+      }
+
+      const [{ data: oldSales }, { data: oldPays }] = await Promise.all([salesBeforeQuery, payBeforeQuery]);
+      const openBal = (oldSales || []).reduce((s, x) => s + Number(x.total_amount), 0) - (oldPays || []).reduce((s, x) => s + Number(x.amount), 0);
+      setOpeningBalance(openBal);
+
+      // Period Transactions
+      let salesPeriodQuery = supabase.from('sales').select('id, total_amount, created_at, sale_items(product_name, quantity)').eq('business_id', business.id).eq('payment_method', 'credit').eq('status', 'completed').gte('created_at', startISO).lte('created_at', endISO);
+      let payPeriodQuery = supabase.from('debt_payments').select('id, amount, created_at, note').eq('business_id', business.id).gte('created_at', startISO).lte('created_at', endISO);
+
+      if (isWalkin) {
+        salesPeriodQuery = salesPeriodQuery.is('customer_id', null).eq('customer_name', selectedCustomer.id.replace('name:', ''));
+        payPeriodQuery = payPeriodQuery.is('customer_id', null);
+      } else {
+        salesPeriodQuery = salesPeriodQuery.eq('customer_id', selectedCustomer.id);
+        payPeriodQuery = payPeriodQuery.eq('customer_id', selectedCustomer.id);
+      }
+
+      const [{ data: periodSales }, { data: periodPays }] = await Promise.all([salesPeriodQuery, payPeriodQuery]);
+
+      const ledger: StatementEntry[] = [
+        ...(periodSales || []).map(s => ({
+          date: s.created_at,
+          type: 'sale' as const,
+          description: `Credit Sale #${s.id.slice(0, 8)}`,
+          debit: Number(s.total_amount),
+          credit: 0,
+          balance: 0,
+          items: (s.sale_items as any[] || []).map(i => `${i.quantity}x ${i.product_name}`).join(', '),
+        })),
+        ...(periodPays || []).map(p => ({
+          date: p.created_at,
+          type: 'payment' as const,
+          description: p.note ? `Payment: ${p.note}` : 'Debt Payment',
+          debit: 0,
+          credit: Number(p.amount),
+          balance: 0,
+        }))
+      ].sort((a, b) => a.date.localeCompare(b.date));
+
+      let current = openBal;
+      ledger.forEach(entry => {
+        current = current + entry.debit - entry.credit;
+        entry.balance = current;
+      });
+
+      setStatementLedger(ledger);
+    } catch (e: any) {
+      Alert.alert('Error', e.message);
+    } finally {
+      setLoadingStatement(false);
+    }
+  };
+
+  const handlePrintStatement = async (share = false) => {
+    if (!selectedCustomer || !business) return;
+    const data: StatementData = {
+      businessName: business.name,
+      businessTin: business.tin,
+      businessPhone: business.phone,
+      businessAddress: business.address,
+      customerName: selectedCustomer.name,
+      customerPhone: selectedCustomer.phone,
+      startDate: startDate.toLocaleDateString(),
+      endDate: endDate.toLocaleDateString(),
+      openingBalance: openingBalance,
+      entries: statementLedger,
+      closingBalance: statementLedger.length > 0 ? statementLedger[statementLedger.length - 1].balance : openingBalance,
+      currencySymbol: 'UGX',
+    };
+    if (share) await shareStatementPdf(data);
+    else await printStatement(data);
   };
 
   // Record a payment
@@ -802,63 +916,171 @@ export default function DebtsScreen() {
               </TouchableOpacity>
             </View>
 
-            {selectedCustomer && (
-              <View style={styles.detailSummary}>
-                <View style={styles.detailSummaryItem}>
-                  <Text style={styles.detailSummaryVal}>{fmt(selectedCustomer.totalDebt)}</Text>
-                  <Text style={styles.detailSummaryLabel}>Total Debt</Text>
-                </View>
-                <View style={styles.detailSummaryItem}>
-                  <Text style={[styles.detailSummaryVal, { color: '#4CAF50' }]}>{fmt(selectedCustomer.totalPaid)}</Text>
-                  <Text style={styles.detailSummaryLabel}>Total Paid</Text>
-                </View>
-                <View style={styles.detailSummaryItem}>
-                  <Text style={[styles.detailSummaryVal, { color: '#e94560' }]}>{fmt(selectedCustomer.balance)}</Text>
-                  <Text style={styles.detailSummaryLabel}>Balance</Text>
-                </View>
-              </View>
-            )}
+            {/* Mode Toggle */}
+            <View style={[styles.tabRow, { marginBottom: 16 }]}>
+              <TouchableOpacity
+                style={[styles.tab, !statementView && styles.tabActive]}
+                onPress={() => setStatementView(false)}
+              >
+                <Text style={[styles.tabText, !statementView && styles.tabTextActive]}>History</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.tab, statementView && styles.tabActive]}
+                onPress={() => {
+                  setStatementView(true);
+                  if (statementLedger.length === 0) loadStatement();
+                }}
+              >
+                <Text style={[styles.tabText, statementView && styles.tabTextActive]}>Statement</Text>
+              </TouchableOpacity>
+            </View>
 
-            {loadingDetail ? (
-              <ActivityIndicator size="large" color="#e94560" style={{ marginTop: 20 }} />
-            ) : (
-              <FlatList
-                data={creditSales}
-                keyExtractor={(item) => item.id}
-                style={{ maxHeight: 400 }}
-                renderItem={({ item }) => (
-                  <View style={styles.saleCard}>
-                    <View style={styles.saleCardHeader}>
-                      <View style={{ backgroundColor: 'transparent', flex: 1 }}>
-                        <Text style={styles.saleCardDate}>{formatDate(item.created_at)}</Text>
-                        <Text style={styles.saleCardAmount}>Sale: {fmt(item.total_amount)}</Text>
-                        <Text style={[styles.saleCardPaid, { color: item.balance > 0 ? '#e94560' : '#4CAF50' }]}>
-                          Paid: {fmt(item.paid)} · Balance: {fmt(item.balance)}
-                        </Text>
-                      </View>
-                      <View style={{ backgroundColor: 'transparent', gap: 6 }}>
-                        {item.balance > 0 && (
-                          <TouchableOpacity style={styles.payBtn} onPress={() => openPaymentModal(item)}>
-                            <FontAwesome name="money" size={14} color="#fff" />
-                            <Text style={styles.payBtnText}>Pay</Text>
-                          </TouchableOpacity>
-                        )}
-                        <TouchableOpacity style={styles.historyBtn} onPress={() => viewPaymentHistory(item.id)}>
-                          <FontAwesome name="history" size={12} color="#aaa" />
-                        </TouchableOpacity>
-                      </View>
+            {!statementView ? (
+              <>
+                {selectedCustomer && (
+                  <View style={styles.detailSummary}>
+                    <View style={styles.detailSummaryItem}>
+                      <Text style={styles.detailSummaryVal}>{fmt(selectedCustomer.totalDebt)}</Text>
+                      <Text style={styles.detailSummaryLabel}>Total Debt</Text>
                     </View>
-                    {item.paid > 0 && (
-                      <View style={styles.progressBar}>
-                        <View style={[styles.progressFill, { width: `${Math.min(100, (item.paid / item.total_amount) * 100)}%` }]} />
-                      </View>
-                    )}
+                    <View style={styles.detailSummaryItem}>
+                      <Text style={[styles.detailSummaryVal, { color: '#4CAF50' }]}>{fmt(selectedCustomer.totalPaid)}</Text>
+                      <Text style={styles.detailSummaryLabel}>Total Paid</Text>
+                    </View>
+                    <View style={styles.detailSummaryItem}>
+                      <Text style={[styles.detailSummaryVal, { color: '#e94560' }]}>{fmt(selectedCustomer.balance)}</Text>
+                      <Text style={styles.detailSummaryLabel}>Balance</Text>
+                    </View>
                   </View>
                 )}
-                ListEmptyComponent={
-                  <Text style={{ color: '#666', textAlign: 'center', marginTop: 20 }}>No credit sales found</Text>
-                }
-              />
+
+                {loadingDetail ? (
+                  <ActivityIndicator size="large" color="#e94560" style={{ marginTop: 20 }} />
+                ) : (
+                  <FlatList
+                    data={creditSales}
+                    keyExtractor={(item) => item.id}
+                    style={{ maxHeight: 400 }}
+                    renderItem={({ item }) => (
+                      <View style={styles.saleCard}>
+                        <View style={styles.saleCardHeader}>
+                          <View style={{ backgroundColor: 'transparent', flex: 1 }}>
+                            <Text style={styles.saleCardDate}>{formatDate(item.created_at)}</Text>
+                            <Text style={styles.saleCardAmount}>Sale: {fmt(item.total_amount)}</Text>
+                            <Text style={styles.itemTakenText}>Taken: {item.items}</Text>
+                            <Text style={[styles.saleCardPaid, { color: item.balance > 0 ? '#e94560' : '#4CAF50', marginTop: 4 }]}>
+                               Paid: {fmt(item.paid)} · Bal: {fmt(item.balance)}
+                            </Text>
+                          </View>
+                          <View style={{ backgroundColor: 'transparent', gap: 6 }}>
+                            {item.balance > 0 && (
+                              <TouchableOpacity style={styles.payBtn} onPress={() => openPaymentModal(item)}>
+                                <FontAwesome name="money" size={14} color="#fff" />
+                                <Text style={styles.payBtnText}>Pay</Text>
+                              </TouchableOpacity>
+                            )}
+                            <TouchableOpacity style={styles.historyBtn} onPress={() => viewPaymentHistory(item.id)}>
+                              <FontAwesome name="history" size={12} color="#aaa" />
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                        {item.paid > 0 && (
+                          <View style={styles.progressBar}>
+                            <View style={[styles.progressFill, { width: `${Math.min(100, (item.paid / item.total_amount) * 100)}%` }]} />
+                          </View>
+                        )}
+                      </View>
+                    )}
+                    ListEmptyComponent={
+                      <Text style={{ color: '#666', textAlign: 'center', marginTop: 20 }}>No credit sales found</Text>
+                    }
+                  />
+                )}
+              </>
+            ) : (
+              <View style={{ flex: 1 }}>
+                {/* Statement Controls */}
+                <View style={styles.statementControls}>
+                  <View style={{ flexDirection: 'row', gap: 10, flex: 1, backgroundColor: 'transparent' }}>
+                    <TouchableOpacity style={styles.dateSelector} onPress={() => setShowStartPicker(true)}>
+                      <Text style={styles.dateSelectorLabel}>From</Text>
+                      <Text style={styles.dateSelectorVal}>{startDate.toLocaleDateString()}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.dateSelector} onPress={() => setShowEndPicker(true)}>
+                      <Text style={styles.dateSelectorLabel}>To</Text>
+                      <Text style={styles.dateSelectorVal}>{endDate.toLocaleDateString()}</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <TouchableOpacity style={styles.refreshBtn} onPress={loadStatement}>
+                    <FontAwesome name="refresh" size={18} color="#fff" />
+                  </TouchableOpacity>
+                </View>
+
+                {showStartPicker && (
+                  <DateTimePicker
+                    value={startDate}
+                    mode="date"
+                    onChange={(event, date) => {
+                      setShowStartPicker(false);
+                      if (date) setStartDate(date);
+                    }}
+                  />
+                )}
+                {showEndPicker && (
+                  <DateTimePicker
+                    value={endDate}
+                    mode="date"
+                    onChange={(event, date) => {
+                      setShowEndPicker(false);
+                      if (date) setEndDate(date);
+                    }}
+                  />
+                )}
+
+                {loadingStatement ? (
+                  <ActivityIndicator size="large" color="#e94560" style={{ marginTop: 20 }} />
+                ) : (
+                  <>
+                    <View style={styles.openingBalCard}>
+                      <Text style={styles.openingBalLabel}>Opening Balance</Text>
+                      <Text style={styles.openingBalVal}>{fmt(openingBalance)}</Text>
+                    </View>
+
+                    <FlatList
+                      data={statementLedger}
+                      keyExtractor={(item, index) => index.toString()}
+                      style={{ flex: 1 }}
+                      renderItem={({ item }) => (
+                        <View style={styles.ledgerRow}>
+                          <View style={{ flex: 1, backgroundColor: 'transparent' }}>
+                            <Text style={styles.ledgerDate}>{formatDate(item.date)}</Text>
+                            <Text style={styles.ledgerDesc}>{item.description}</Text>
+                            {item.items && <Text style={styles.ledgerItems}>{item.items}</Text>}
+                          </View>
+                          <View style={{ alignItems: 'flex-end', backgroundColor: 'transparent' }}>
+                            <Text style={[styles.ledgerAmt, { color: item.debit > 0 ? '#e94560' : '#4CAF50' }]}>
+                              {item.debit > 0 ? `+${fmt(item.debit)}` : `-${fmt(item.credit)}`}
+                            </Text>
+                            <Text style={styles.ledgerBal}>Bal: {fmt(item.balance)}</Text>
+                          </View>
+                        </View>
+                      )}
+                      ListEmptyComponent={<Text style={styles.emptyText}>No transactions in this period</Text>}
+                    />
+
+                    <View style={styles.statementActions}>
+                      <TouchableOpacity style={[styles.actionBtn, {backgroundColor: '#533483'}]} onPress={() => handlePrintStatement(true)}>
+                        <FontAwesome name="share" size={16} color="#fff" />
+                        <Text style={styles.actionBtnText}>Share PDF</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.actionBtn} onPress={() => handlePrintStatement(false)}>
+                        <FontAwesome name="print" size={16} color="#fff" />
+                        <Text style={styles.actionBtnText}>Print Statement</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </>
+                )}
+              </View>
             )}
           </View>
         </View>
@@ -888,11 +1110,16 @@ export default function DebtsScreen() {
               />
 
               <Text style={styles.label}>Payment Method</Text>
-              <View style={styles.chipRow}>
+              <ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false}
+                style={{ backgroundColor: 'transparent' }}
+                contentContainerStyle={{ gap: 8 }}
+              >
                 {PAYMENT_METHODS.filter(m => m.value !== 'credit').map((m) => (
                   <TouchableOpacity
                     key={m.value}
-                    style={[styles.chip, payMethod === m.value && styles.chipActive]}
+                    style={[styles.chip, payMethod === m.value && styles.chipActive, { minWidth: 80, alignItems: 'center' }]}
                     onPress={() => setPayMethod(m.value)}
                   >
                     <Text style={[styles.chipText, payMethod === m.value && { color: '#fff' }]}>
@@ -900,7 +1127,7 @@ export default function DebtsScreen() {
                     </Text>
                   </TouchableOpacity>
                 ))}
-              </View>
+              </ScrollView>
 
               <Text style={styles.label}>Note (optional)</Text>
               <TextInput
@@ -1061,11 +1288,16 @@ export default function DebtsScreen() {
               />
 
               <Text style={styles.label}>Payment Method</Text>
-              <View style={styles.chipRow}>
+              <ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false}
+                style={{ backgroundColor: 'transparent' }}
+                contentContainerStyle={{ gap: 8 }}
+              >
                 {PAYMENT_METHODS.filter(m => m.value !== 'credit').map((m) => (
                   <TouchableOpacity
                     key={m.value}
-                    style={[styles.chip, supplierPayMethod === m.value && styles.chipActive]}
+                    style={[styles.chip, supplierPayMethod === m.value && styles.chipActive, { minWidth: 80, alignItems: 'center' }]}
                     onPress={() => setSupplierPayMethod(m.value)}
                   >
                     <Text style={[styles.chipText, supplierPayMethod === m.value && { color: '#fff' }]}>
@@ -1073,7 +1305,7 @@ export default function DebtsScreen() {
                     </Text>
                   </TouchableOpacity>
                 ))}
-              </View>
+              </ScrollView>
 
               <Text style={styles.label}>Note (optional)</Text>
               <TextInput
@@ -1254,4 +1486,23 @@ const styles = StyleSheet.create({
   saveBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
   cancelBtn: { padding: 14, alignItems: 'center', marginTop: 8 },
   cancelBtnText: { color: '#aaa', fontSize: 15 },
+  itemTakenText: { fontSize: 12, color: '#aaa', fontStyle: 'italic', marginTop: 2 },
+  // Statement Styles
+  statementControls: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12, backgroundColor: 'transparent' },
+  dateSelector: { flex: 1, backgroundColor: '#16213e', borderRadius: 10, padding: 8, borderWidth: 1, borderColor: '#0f3460' },
+  dateSelectorLabel: { fontSize: 10, color: '#666', marginBottom: 2 },
+  dateSelectorVal: { fontSize: 13, color: '#fff', fontWeight: 'bold' },
+  refreshBtn: { backgroundColor: '#e94560', width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  openingBalCard: { backgroundColor: '#16213e', borderRadius: 12, padding: 12, marginBottom: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  openingBalLabel: { color: '#aaa', fontSize: 13 },
+  openingBalVal: { color: '#fff', fontSize: 15, fontWeight: 'bold' },
+  ledgerRow: { backgroundColor: '#16213e', borderRadius: 12, padding: 12, marginBottom: 8, flexDirection: 'row', justifyContent: 'space-between' },
+  ledgerDate: { fontSize: 10, color: '#666' },
+  ledgerDesc: { fontSize: 14, color: '#fff', fontWeight: 'bold', marginTop: 2 },
+  ledgerItems: { fontSize: 11, color: '#aaa', fontStyle: 'italic' },
+  ledgerAmt: { fontSize: 14, fontWeight: 'bold' },
+  ledgerBal: { fontSize: 11, color: '#888', marginTop: 4 },
+  statementActions: { flexDirection: 'row', gap: 10, marginTop: 16, backgroundColor: 'transparent' },
+  actionBtn: { flex: 1, backgroundColor: '#e94560', borderRadius: 12, paddingVertical: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  actionBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
 });

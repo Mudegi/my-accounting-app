@@ -124,6 +124,8 @@ async function postJournalEntry(
   description: string,
   lines: JournalLine[],
   userId?: string,
+  currencyCode: string = 'UGX',
+  exchangeRate: number = 1
 ): Promise<{ success: boolean; error?: string }> {
   try {
     // Validate: total debits must equal total credits
@@ -161,6 +163,8 @@ async function postJournalEntry(
         description,
         is_auto: true,
         created_by: userId,
+        currency_code: currencyCode,
+        exchange_rate: exchangeRate
       })
       .select()
       .single();
@@ -170,13 +174,19 @@ async function postJournalEntry(
     // Create journal entry lines (skip zero amounts)
     const entryLines = lines
       .filter(l => (l.debit || 0) > 0 || (l.credit || 0) > 0)
-      .map(l => ({
-        journal_entry_id: entry.id,
-        account_id: accountMap[l.accountCode],
-        debit: Math.round((l.debit || 0) * 100) / 100,
-        credit: Math.round((l.credit || 0) * 100) / 100,
-        description: l.description || '',
-      }));
+      .map(l => {
+        const dr = Math.round((l.debit || 0) * 100) / 100;
+        const cr = Math.round((l.credit || 0) * 100) / 100;
+        return {
+          journal_entry_id: entry.id,
+          account_id: accountMap[l.accountCode],
+          debit: dr,
+          credit: cr,
+          base_debit: Math.round(dr * exchangeRate * 100) / 100,
+          base_credit: Math.round(cr * exchangeRate * 100) / 100,
+          description: l.description || '',
+        };
+      });
 
     const { error: linesErr } = await supabase
       .from('journal_entry_lines')
@@ -221,10 +231,12 @@ export async function postSaleEntry(params: {
   discountAmount?: number;
   paymentMethod: string;
   userId?: string;
+  currencyCode?: string;
+  exchangeRate?: number;
 }) {
   const { businessId, branchId, saleId, subtotal, taxAmount, totalAmount,
           costOfGoods, goodsRevenue, serviceRevenue, costOfServices = 0,
-          discountAmount = 0, paymentMethod, userId } = params;
+          discountAmount = 0, paymentMethod, userId, currencyCode = 'UGX', exchangeRate = 1 } = params;
   const payAcct = PAYMENT_ACCOUNT_MAP[paymentMethod] || ACC.CASH;
 
   const lines: JournalLine[] = [
@@ -256,7 +268,7 @@ export async function postSaleEntry(params: {
     lines.push({ accountCode: ACC.COST_OF_SERVICES, debit: costOfServices, description: 'Cost of services provided' });
   }
 
-  return postJournalEntry(businessId, branchId, 'sale', saleId, `Sale #${saleId.slice(0, 8)}`, lines, userId);
+  return postJournalEntry(businessId, branchId, 'sale', saleId, `Sale #${saleId.slice(0, 8)}`, lines, userId, currencyCode, exchangeRate);
 }
 
 // ════════════════════════════════════════════════════════════
@@ -278,8 +290,10 @@ export async function postPurchaseEntry(params: {
   vatAmount?: number;
   paymentMethod?: string;
   userId?: string;
+  currencyCode?: string;
+  exchangeRate?: number;
 }) {
-  const { businessId, branchId, purchaseId, totalCost, vatAmount = 0, paymentMethod = 'cash', userId } = params;
+  const { businessId, branchId, purchaseId, totalCost, vatAmount = 0, paymentMethod = 'cash', userId, currencyCode = 'UGX', exchangeRate = 1 } = params;
   // For credit purchases, credit Accounts Payable (we owe the supplier)
   // For cash/momo/bank purchases, credit the payment asset account
   const payAcct = paymentMethod === 'credit'
@@ -297,7 +311,7 @@ export async function postPurchaseEntry(params: {
     lines.push({ accountCode: ACC.VAT_INPUT, debit: vatAmount, description: 'Input VAT on purchase' });
   }
 
-  return postJournalEntry(businessId, branchId, 'purchase', purchaseId, `Purchase #${purchaseId.slice(0, 8)}`, lines, userId);
+  return postJournalEntry(businessId, branchId, 'purchase', purchaseId, `Purchase #${purchaseId.slice(0, 8)}`, lines, userId, currencyCode, exchangeRate);
 }
 
 // ════════════════════════════════════════════════════════════
@@ -403,8 +417,10 @@ export async function postExpenseEntry(params: {
   description: string;
   paymentMethod?: string;
   userId?: string;
+  currencyCode?: string;
+  exchangeRate?: number;
 }) {
-  const { businessId, branchId, expenseId, amount, category, description, paymentMethod = 'cash', userId } = params;
+  const { businessId, branchId, expenseId, amount, category, description, paymentMethod = 'cash', userId, currencyCode = 'UGX', exchangeRate = 1 } = params;
   const expenseAcct = EXPENSE_ACCOUNT_MAP[category] || ACC.MISC_EXPENSE;
   
   // DR Expense, CR Payment Asset (Cash/Bank) OR CR Accounts Payable (Credit)
@@ -417,7 +433,7 @@ export async function postExpenseEntry(params: {
     { accountCode: payAcct, credit: amount, description: `Paid: ${description}` },
   ];
 
-  return postJournalEntry(businessId, branchId, 'expense', expenseId, `Expense: ${description}`, lines, userId);
+  return postJournalEntry(businessId, branchId, 'expense', expenseId, `Expense: ${description}`, lines, userId, currencyCode, exchangeRate);
 }
 
 // ════════════════════════════════════════════════════════════
@@ -467,22 +483,25 @@ export type AccountBalance = {
   code: string;
   name: string;
   account_type: 'asset' | 'liability' | 'equity' | 'revenue' | 'expense';
+  opening_balance: number;
   total_debit: number;
   total_credit: number;
   balance: number;
 };
 
 /**
- * Fetch Trial Balance — all account balances
+ * Fetch Trial Balance — all account balances with Opening/DR/CR/Closing
  */
 export async function getTrialBalance(params: {
   businessId: string;
   branchId?: string | null;
-  fromDate?: string;
-  toDate?: string;
+  fromDate: string; // Required for movement/detailed reports
+  toDate: string;
+  fiscalYearStartMonth?: number;
 }): Promise<AccountBalance[]> {
-  const { businessId, branchId, fromDate, toDate } = params;
+  const { businessId, branchId, fromDate, toDate, fiscalYearStartMonth = 1 } = params;
 
+  // 1. Fetch all active accounts
   const { data: accounts } = await supabase
     .from('accounts')
     .select('id, code, name, account_type')
@@ -492,53 +511,90 @@ export async function getTrialBalance(params: {
 
   if (!accounts || accounts.length === 0) return [];
 
-  let jeQuery = supabase
-    .from('journal_entries')
-    .select('id')
-    .eq('business_id', businessId);
+  /**
+   * Performance Approach:
+   * Instead of manual looping, we use direct filtering on journal_entry_lines
+   * and aggregate totals for the period vs history.
+   */
 
-  if (branchId) jeQuery = jeQuery.eq('branch_id', branchId);
-  if (fromDate) jeQuery = jeQuery.gte('entry_date', fromDate);
-  if (toDate) jeQuery = jeQuery.lte('entry_date', toDate);
+  // Determine "Fiscal Opening Date" (e.g. if Jan, it's YYYY-01-01)
+  const toD = new Date(toDate);
+  let fiscalYear = toD.getFullYear();
+  if (toD.getMonth() + 1 < fiscalYearStartMonth) fiscalYear--;
+  const fiscalStartDate = `${fiscalYear}-${String(fiscalYearStartMonth).padStart(2, '0')}-01`;
 
-  const { data: entries } = await jeQuery;
-  if (!entries || entries.length === 0) {
-    return accounts.map(a => ({
-      account_id: a.id, code: a.code, name: a.name, account_type: a.account_type,
-      total_debit: 0, total_credit: 0, balance: 0,
-    }));
-  }
+  // Fetch Movement (Period: fromDate to toDate)
+  let movementQuery = supabase
+    .from('journal_entry_lines')
+    .select(`
+      account_id,
+      base_debit,
+      base_credit,
+      journal_entries!inner(entry_date, business_id, branch_id)
+    `)
+    .eq('journal_entries.business_id', businessId)
+    .gte('journal_entries.entry_date', fromDate)
+    .lte('journal_entries.entry_date', toDate);
 
-  const entryIds = entries.map(e => e.id);
-  const allLines: any[] = [];
-  for (let i = 0; i < entryIds.length; i += 100) {
-    const chunk = entryIds.slice(i, i + 100);
-    const { data: lines } = await supabase
-      .from('journal_entry_lines')
-      .select('account_id, debit, credit')
-      .in('journal_entry_id', chunk);
-    if (lines) allLines.push(...lines);
-  }
+  if (branchId) movementQuery = movementQuery.eq('journal_entries.branch_id', branchId);
+  const { data: movementLines } = await movementQuery;
 
-  const totals: Record<string, { debit: number; credit: number }> = {};
-  allLines.forEach(line => {
-    if (!totals[line.account_id]) totals[line.account_id] = { debit: 0, credit: 0 };
-    totals[line.account_id].debit += Number(line.debit) || 0;
-    totals[line.account_id].credit += Number(line.credit) || 0;
+  // Fetch Opening Balances (Cumulative from Fiscal Start until fromDate)
+  let openingQuery = supabase
+    .from('journal_entry_lines')
+    .select(`
+      account_id,
+      base_debit,
+      base_credit,
+      journal_entries!inner(entry_date, business_id, branch_id)
+    `)
+    .eq('journal_entries.business_id', businessId)
+    .lt('journal_entries.entry_date', fromDate);
+
+  if (branchId) openingQuery = openingQuery.eq('journal_entries.branch_id', branchId);
+  const { data: openingLines } = await openingQuery;
+
+  const totals: Record<string, { dr_mov: number; cr_mov: number; opening: number }> = {};
+  
+  // Aggregate Movements
+  movementLines?.forEach(line => {
+    if (!totals[line.account_id]) totals[line.account_id] = { dr_mov: 0, cr_mov: 0, opening: 0 };
+    totals[line.account_id].dr_mov += Number(line.base_debit) || 0;
+    totals[line.account_id].cr_mov += Number(line.base_credit) || 0;
+  });
+
+  // Aggregate Opening Balances
+  openingLines?.forEach(line => {
+    if (!totals[line.account_id]) totals[line.account_id] = { dr_mov: 0, cr_mov: 0, opening: 0 };
+    const acc = accounts.find(a => a.id === line.account_id);
+    if (!acc) return;
+
+    // Filter by fiscal start if it's P&L account
+    const isPnL = acc.account_type === 'revenue' || acc.account_type === 'expense';
+    if (isPnL && line.journal_entries.entry_date < fiscalStartDate) return;
+
+    const dr = Number(line.base_debit) || 0;
+    const cr = Number(line.base_credit) || 0;
+    const isDebitNormal = acc.account_type === 'asset' || acc.account_type === 'expense';
+    totals[line.account_id].opening += isDebitNormal ? (dr - cr) : (cr - dr);
   });
 
   return accounts.map(a => {
-    const t = totals[a.id] || { debit: 0, credit: 0 };
+    const t = totals[a.id] || { dr_mov: 0, cr_mov: 0, opening: 0 };
     const isDebitNormal = a.account_type === 'asset' || a.account_type === 'expense';
-    const balance = isDebitNormal ? t.debit - t.credit : t.credit - t.debit;
+    
+    // Closing Balance = Opening + (Net Movement)
+    const netMov = isDebitNormal ? (t.dr_mov - t.cr_mov) : (t.cr_mov - t.dr_mov);
+    const balance = t.opening + netMov;
 
     return {
       account_id: a.id, code: a.code, name: a.name, account_type: a.account_type,
-      total_debit: Math.round(t.debit * 100) / 100,
-      total_credit: Math.round(t.credit * 100) / 100,
+      opening_balance: Math.round(t.opening * 100) / 100,
+      total_debit: Math.round(t.dr_mov * 100) / 100,
+      total_credit: Math.round(t.cr_mov * 100) / 100,
       balance: Math.round(balance * 100) / 100,
     };
-  }).filter(a => a.total_debit > 0 || a.total_credit > 0);
+  }).filter(a => a.opening_balance !== 0 || a.total_debit !== 0 || a.total_credit !== 0);
 }
 
 export function computePnL(trialBalance: AccountBalance[]) {
@@ -556,7 +612,7 @@ export function computePnL(trialBalance: AccountBalance[]) {
       case ACC.COGS: cogs += a.balance; break;
       case ACC.COST_OF_SERVICES: cogs += a.balance; break; // Pool both for gross profit calculation
       default:
-        if (a.account_type === 'expense' && a.code !== ACC.COGS && a.balance !== 0) {
+        if (a.account_type === 'expense' && a.code !== ACC.COGS && a.code !== ACC.STOCK_TRANSFERS && a.balance !== 0) {
           operatingExpenses.push({ name: a.name, amount: a.balance });
           totalOpEx += a.balance;
         }

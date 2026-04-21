@@ -22,6 +22,8 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [businessName, setBusinessName] = useState('');
+  const [selectedCountry, setSelectedCountry] = useState('Uganda');
+  const [selectedCurrency, setSelectedCurrency] = useState('UGX');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
@@ -126,8 +128,8 @@ export default function LoginScreen() {
   };
 
   const handleSignUp = async () => {
-    if (!email || !password || !fullName || !businessName) {
-      Alert.alert('Error', 'Please fill in all fields');
+    if (!email || !password || !fullName || !businessName || !selectedCountry || !selectedCurrency) {
+      Alert.alert('Error', 'Please fill in all fields including Country and Currency');
       return;
     }
     if (password.length < 6) {
@@ -135,12 +137,11 @@ export default function LoginScreen() {
       return;
     }
     setLoading(true);
-    const { error } = await signUp(email, password, fullName, businessName);
+    const { error } = await signUp(email, password, fullName, businessName, selectedCountry, selectedCurrency);
     if (error) {
       Alert.alert('Sign Up Failed', error.message);
-      setLoading(false);
     }
-    // Success is handled by the sequential flow in useAuth which will trigger a root layout redirect
+    setLoading(false);
   };
 
   return (
@@ -177,6 +178,43 @@ export default function LoginScreen() {
                 onChangeText={setBusinessName}
                 autoCapitalize="words"
               />
+
+              <View style={styles.pickerContainer}>
+                <Text style={styles.pickerLabel}>Base Country</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll}>
+                  {['Uganda', 'Kenya', 'Tanzania', 'Rwanda', 'Burundi', 'South Sudan', 'Nigeria', 'Other'].map((c) => (
+                    <TouchableOpacity
+                      key={c}
+                      style={[styles.chip, selectedCountry === c && styles.chipSelected]}
+                      onPress={() => {
+                        setSelectedCountry(c);
+                        const fallback = {
+                          'Uganda': 'UGX', 'Kenya': 'KES', 'Tanzania': 'TZS', 'Rwanda': 'RWF', 
+                          'Burundi': 'BIF', 'South Sudan': 'SSP', 'Nigeria': 'NGN'
+                        }[c];
+                        if (fallback) setSelectedCurrency(fallback);
+                      }}
+                    >
+                      <Text style={[styles.chipText, selectedCountry === c && styles.chipTextSelected]}>{c}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+
+              <View style={styles.pickerContainer}>
+                <Text style={styles.pickerLabel}>Base Currency</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll}>
+                  {['UGX', 'KES', 'TZS', 'RWF', 'USD', 'EUR', 'GBP', 'NGN'].map((curr) => (
+                    <TouchableOpacity
+                      key={curr}
+                      style={[styles.chip, selectedCurrency === curr && styles.chipSelected]}
+                      onPress={() => setSelectedCurrency(curr)}
+                    >
+                      <Text style={[styles.chipText, selectedCurrency === curr && styles.chipTextSelected]}>{curr}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
             </>
           )}
 
@@ -473,4 +511,38 @@ const styles = StyleSheet.create({
   modalBtnText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
   modalCancel: { padding: 14, alignItems: 'center', marginTop: 8 },
   modalCancelText: { color: '#888', fontSize: 15 },
+  pickerContainer: {
+    marginBottom: 20,
+    backgroundColor: 'transparent',
+  },
+  pickerLabel: {
+    fontSize: 14,
+    color: '#aaa',
+    marginBottom: 10,
+    marginLeft: 4,
+  },
+  chipScroll: {
+    flexDirection: 'row',
+  },
+  chip: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    backgroundColor: '#16213e',
+    marginRight: 10,
+    borderWidth: 1,
+    borderColor: '#0f3460',
+  },
+  chipSelected: {
+    backgroundColor: '#e94560',
+    borderColor: '#e94560',
+  },
+  chipText: {
+    color: '#aaa',
+    fontSize: 14,
+  },
+  chipTextSelected: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
 });

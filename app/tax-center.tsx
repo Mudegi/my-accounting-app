@@ -25,10 +25,10 @@ import * as Sharing from 'expo-sharing';
 type TaxPeriod = 'month' | '3months' | '6months' | 'year';
 
 export default function TaxCenterScreen() {
-  const { business, currentBranch, profile, fmt, currency } = useAuth();
+  const { business, currentBranch, profile, fmt, currency, hasFeature } = useAuth();
   const router = useRouter();
   const isAdmin = profile?.role === 'admin';
-  const efrisEnabled = business?.is_efris_enabled ?? false;
+  const efrisEnabled = (business?.is_efris_enabled ?? false) && hasFeature('efris');
 
   const [period, setPeriod] = useState<TaxPeriod>('month');
   const [loading, setLoading] = useState(false);
@@ -156,24 +156,32 @@ export default function TaxCenterScreen() {
       ok: !!business?.tin,
       detail: business?.tin || 'Not Set — Required for URA filing',
       icon: 'id-card',
+      action: () => router.push('/(tabs)/settings'),
+      actionLabel: 'Set TIN',
     },
     {
       label: 'EFRIS Enabled',
       ok: business?.is_efris_enabled,
       detail: business?.is_efris_enabled ? 'Connected' : 'Not enabled — Pro plan required',
       icon: 'plug',
+      action: () => router.push('/subscription'),
+      actionLabel: 'Upgrade',
     },
     {
       label: 'Unfiscalized Sales',
       ok: unfiscalizedCount === 0,
       detail: unfiscalizedCount === 0 ? 'All sales submitted to EFRIS' : `${unfiscalizedCount} sales not yet submitted`,
       icon: 'exclamation-circle',
+      action: () => router.push('/sales'),
+      actionLabel: 'View Sales',
     },
     {
       label: 'B2B Sales Missing TIN',
       ok: missingTinCount === 0,
       detail: missingTinCount === 0 ? 'All taxable sales have customer TIN' : `${missingTinCount} taxable sales without customer TIN`,
       icon: 'user-circle',
+      action: () => router.push('/sales'),
+      actionLabel: 'Fix Sales',
     },
   ];
 
@@ -237,6 +245,11 @@ export default function TaxCenterScreen() {
                       <Text style={styles.healthLabel}>{h.label}</Text>
                       <Text style={[styles.healthDetail, !h.ok && { color: '#FF9800' }]}>{h.detail}</Text>
                     </View>
+                    {!h.ok && h.action && (
+                      <TouchableOpacity style={styles.healthActionBtn} onPress={h.action}>
+                        <Text style={styles.healthActionText}>{h.actionLabel}</Text>
+                      </TouchableOpacity>
+                    )}
                   </View>
                 ))}
               </View>
@@ -482,6 +495,15 @@ const styles = StyleSheet.create({
   },
   healthLabel: { fontSize: 14, fontWeight: 'bold', color: '#fff' },
   healthDetail: { fontSize: 12, color: '#aaa', marginTop: 2 },
+  healthActionBtn: {
+    backgroundColor: '#0f3460',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e9456033',
+  },
+  healthActionText: { color: '#e94560', fontSize: 11, fontWeight: 'bold' },
 
   // VAT card
   deadlineRow: {

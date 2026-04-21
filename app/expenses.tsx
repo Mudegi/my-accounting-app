@@ -14,8 +14,9 @@ import { Text, View } from '@/components/Themed';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { postExpenseEntry, PAYMENT_METHODS } from '@/lib/accounting';
+import { loadCurrencies, convertCurrency, getCurrency, type Currency } from '@/lib/currency';
 
 type Expense = {
   id: string;
@@ -33,6 +34,7 @@ const EXPENSE_CATEGORIES = [
 
 export default function ExpensesScreen() {
   const { business, currentBranch, branches, profile, fmt, currency } = useAuth();
+  const router = useRouter();
   const isAdmin = profile?.role === 'admin';
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [showForm, setShowForm] = useState(false);
@@ -43,6 +45,12 @@ export default function ExpensesScreen() {
   // Admin: filter by branch or show all
   const [filterBranchId, setFilterBranchId] = useState<string | null>(null);
   const [expPayMethod, setExpPayMethod] = useState('cash');
+
+  // Multi-currency support
+  const [expenseCurrency, setExpenseCurrency] = useState(business?.default_currency || 'UGX');
+  const [exchangeRate, setExchangeRate] = useState(1);
+  const [availableCurrencies, setAvailableCurrencies] = useState<Currency[]>([]);
+  const [isConverting, setIsConverting] = useState(false);
 
   const totalThisMonth = expenses.reduce((sum, e) => sum + Number(e.amount), 0);
 
@@ -77,6 +85,36 @@ export default function ExpensesScreen() {
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
+  useEffect(() => {
+    loadCurrencies().then(setAvailableCurrencies);
+  }, []);
+
+  useEffect(() => {
+    if (business?.default_currency) {
+      setExpenseCurrency(business.default_currency);
+    }
+  }, [business?.default_currency]);
+
+  useEffect(() => {
+    const updateRate = async () => {
+      if (!business) return;
+      if (expenseCurrency === business.default_currency) {
+        setExchangeRate(1);
+        return;
+      }
+      setIsConverting(true);
+      try {
+        const { rate } = await convertCurrency(business.id, 1, business.default_currency, expenseCurrency);
+        setExchangeRate(rate);
+      } catch (e) {
+        console.error('Rate update error:', e);
+      } finally {
+        setIsConverting(false);
+      }
+    };
+    updateRate();
+  }, [expenseCurrency, business?.default_currency]);
+
   const handleAdd = async () => {
     if (!amount || isNaN(Number(amount))) { Alert.alert('Error', 'Enter a valid amount'); return; }
     if (!business || !currentBranch || !profile) return;
@@ -88,6 +126,9 @@ export default function ExpensesScreen() {
       category,
       description: description.trim() || null,
       amount: parseFloat(amount),
+      currency: expenseCurrency,
+      exchange_rate: 1 / exchangeRate,
+      base_total: Math.round(parseFloat(amount) / exchangeRate),
     }).select().single();
     if (error) Alert.alert('Error', error.message);
     else {
@@ -101,6 +142,8 @@ export default function ExpensesScreen() {
         description: description.trim() || category,
         paymentMethod: expPayMethod,
         userId: profile.id,
+        currencyCode: expenseCurrency,
+        exchangeRate: 1 / exchangeRate, // rate back to base currency
       });
       setAmount(''); setDescription(''); setShowForm(false); setExpPayMethod('cash'); load();
     }
@@ -110,6 +153,17 @@ export default function ExpensesScreen() {
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
     <View style={styles.container}>
+      {/* Header with link to Reports */}
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, backgroundColor: 'transparent' }}>
+        <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold' }}>Expenses</Text>
+        <TouchableOpacity 
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#0f3460', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 }}
+          onPress={() => router.push('/reports')}
+        >
+          <FontAwesome name="line-chart" size={14} color="#e94560" />
+          <Text style={{ color: '#aaa', fontSize: 13, fontWeight: '600' }}>Reports</Text>
+        </TouchableOpacity>
+      </View>
       {/* Monthly Total */}
       <View style={styles.totalCard}>
         <Text style={styles.totalLabel}>
@@ -163,7 +217,34 @@ export default function ExpensesScreen() {
               ))}
             </View>
           </ScrollView>
-          <TextInput style={styles.input} placeholder={`Amount (${currency.symbol}) *`} placeholderTextColor="#555" value={amount} onChangeText={setAmount} keyboardType="numeric" />
+          <TextInput style={styles.input} placeholder={`Amount (${getCurrency(expenseCurrency).symbol}) *`} placeholderTextColor="#555" value={amount} onChangeText={setAmount} keyboardType="numeric" />
+          
+          {/* Currency Selection */}
+          <Text style={styles.label}>Expense Currency</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
+            <View style={styles.chipRow}>
+              {availableCurrencies.filter(c => c.is_active).map((c) => (
+                <TouchableOpacity
+                  key={c.code}
+                  style={[styles.chip, expenseCurrency === c.code && styles.chipActive]}
+                  onPress={() => setExpenseCurrency(c.code)}
+                >
+                  <Text style={[styles.chipText, expenseCurrency === c.code && styles.chipTextActive]}>{c.code}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </ScrollView>
+
+          {expenseCurrency !== business?.default_currency && (
+            <View style={{ marginBottom: 12, padding: 10, backgroundColor: '#0f3460', borderRadius: 8 }}>
+              <Text style={{ color: '#aaa', fontSize: 12 }}>Equivalent to:</Text>
+              <Text style={{ color: '#4CAF50', fontSize: 16, fontWeight: 'bold' }}>
+                {fmt(Math.round(parseFloat(amount || '0') / exchangeRate))}
+              </Text>
+              <Text style={{ color: '#666', fontSize: 10, marginTop: 2 }}>Rate: 1 {business?.default_currency} = {exchangeRate.toFixed(4)} {expenseCurrency}</Text>
+            </View>
+          )}
+
           <TextInput style={styles.input} placeholder="Description (optional)" placeholderTextColor="#555" value={description} onChangeText={setDescription} />
 
           {/* Payment Method */}
@@ -219,7 +300,7 @@ export default function ExpensesScreen() {
                 {isAdmin && item.branch_name ? ` · ${item.branch_name}` : ''}
               </Text>
             </View>
-            <Text style={styles.cardAmount}>{fmt(Number(item.amount))}</Text>
+            <Text style={styles.cardAmount}>{fmt(Number(item.base_total || item.amount))}</Text>
           </View>
         )}
         ListEmptyComponent={

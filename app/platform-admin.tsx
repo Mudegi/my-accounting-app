@@ -46,7 +46,10 @@ type BusinessRow = {
   efris_api_key: string | null;
   efris_api_url: string | null;
   efris_test_mode: boolean;
+  efris_test_mode: boolean;
   active_devices: number;
+  is_disabled: boolean;
+  disabled_reason: string | null;
 };
 
 type PaymentRow = {
@@ -122,7 +125,13 @@ export default function PlatformAdminScreen() {
   const [contactPhone, setContactPhone] = useState('');
   const [contactWhatsapp, setContactWhatsapp] = useState('');
   const [contactEmail, setContactEmail] = useState('');
+  const [contactEmail, setContactEmail] = useState('');
   const [savingContacts, setSavingContacts] = useState(false);
+
+  // Disable business modal
+  const [disableModal, setDisableModal] = useState(false);
+  const [disableReason, setDisableReason] = useState('');
+  const [disabling, setDisabling] = useState(false);
 
   // Guard
   if (!isSuperAdmin) {
@@ -314,6 +323,56 @@ export default function PlatformAdminScreen() {
     Alert.alert(ok ? '✅ Connected' : '❌ Failed', ok ? 'EFRIS API is reachable.' : 'Could not connect. Check the API key and URL.');
   };
 
+  // ── Disable Business ──
+  const handleDisable = async () => {
+    if (!selectedBiz || !disableReason.trim()) {
+      Alert.alert('Error', 'Please provide a reason for disabling.');
+      return;
+    }
+    setDisabling(true);
+    try {
+      const { data, error } = await supabase.rpc('admin_disable_business', {
+        p_business_id: selectedBiz.id,
+        p_reason: disableReason.trim(),
+      });
+      if (error) throw error;
+      Alert.alert('✅ Business Disabled', `${selectedBiz.name} has been disabled. All active sessions have been terminated.`);
+      setDisableModal(false);
+      setDisableReason('');
+      await loadBusinesses();
+    } catch (e: any) {
+      Alert.alert('Error', e.message);
+    } finally {
+      setDisabling(false);
+    }
+  };
+
+  // ── Enable Business ──
+  const handleEnable = async (biz: BusinessRow) => {
+    Alert.alert(
+      'Enable Business',
+      `Restore access for "${biz.name}"?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Restore Access',
+          onPress: async () => {
+            try {
+              const { data, error } = await supabase.rpc('admin_enable_business', {
+                p_business_id: biz.id,
+              });
+              if (error) throw error;
+              Alert.alert('✅ Restored', `${biz.name} is now active.`);
+              await loadBusinesses();
+            } catch (e: any) {
+              Alert.alert('Error', e.message);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const filteredBusinesses = businesses.filter(
     (b) => {
       // Text search
@@ -338,6 +397,7 @@ export default function PlatformAdminScreen() {
       past_due: '#FF5722',
       cancelled: '#8B1A1A',
       expired: '#666',
+      disabled: '#000',
     };
     return (
       <View style={{ backgroundColor: colors[status || ''] || '#444', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2 }}>
@@ -502,6 +562,7 @@ export default function PlatformAdminScreen() {
               { key: 'approved', label: '\u2705 Approved' },
               { key: 'active', label: 'Active' },
               { key: 'expired', label: 'Expired' },
+              { key: 'disabled', label: 'Disabled' },
             ].map(f => (
               <TouchableOpacity
                 key={f.key}
@@ -528,7 +589,21 @@ export default function PlatformAdminScreen() {
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4, backgroundColor: 'transparent' }}>
                       {statusBadge(item.subscription_status)}
                       <Text style={{ color: '#888', fontSize: 11 }}>
-                        {item.plan_name || 'No plan'} · {item.user_count} user{item.user_count !== 1 ? 's' : ''} · {item.active_devices || 0} device{(item.active_devices || 0) !== 1 ? 's' : ''}
+                        {item.plan_name || 'No plan'} · {item.active_devices || 0} device{(item.active_devices || 0) !== 1 ? 's' : ''}
+                      </Text>
+                      {item.is_disabled && statusBadge('disabled')}
+                    </View>
+
+                    {/* Resource Counts & Warnings */}
+                    <View style={{ flexDirection: 'row', gap: 10, marginTop: 6, backgroundColor: 'transparent', flexWrap: 'wrap' }}>
+                      <Text style={[styles.miniStat, (item.user_count > item.max_users && item.max_users !== -1) && styles.miniStatWarn]}>
+                        👤 {item.user_count}/{item.max_users === -1 ? '∞' : item.max_users}
+                      </Text>
+                      <Text style={[styles.miniStat, (item.branch_count > item.max_branches && item.max_branches !== -1) && styles.miniStatWarn]}>
+                        🏢 {item.branch_count}/{item.max_branches === -1 ? '∞' : item.max_branches}
+                      </Text>
+                      <Text style={[styles.miniStat, (item.product_count > item.max_products && item.max_products !== -1) && styles.miniStatWarn]}>
+                        📦 {item.product_count}/{item.max_products === -1 ? '∞' : item.max_products}
                       </Text>
                     </View>
                     {item.subscription_ends_at && (
@@ -541,18 +616,18 @@ export default function PlatformAdminScreen() {
 
                 {/* Actions */}
                 <View style={styles.bizActions}>
-                  {item.subscription_status !== 'active' && item.subscription_status !== 'approved' && (
-                    <TouchableOpacity
-                      style={[styles.actionBtn, { backgroundColor: '#2d6a4f' }]}
-                      onPress={() => {
-                        setSelectedBiz(item);
-                        setActivateModal(true);
-                      }}
-                    >
-                      <FontAwesome name="check-circle" size={12} color="#fff" />
-                      <Text style={styles.actionBtnText}>Activate</Text>
-                    </TouchableOpacity>
-                  )}
+                  {/* Always allow Admin to change/activate plan */}
+                  <TouchableOpacity
+                    style={[styles.actionBtn, { backgroundColor: '#2d6a4f' }]}
+                    onPress={() => {
+                      setSelectedBiz(item);
+                      setSelectedPlan((item.plan_name?.toLowerCase().includes('trial') ? 'free_trial' : item.plan_name?.toLowerCase().includes('basic') ? 'basic' : 'pro') as any);
+                      setActivateModal(true);
+                    }}
+                  >
+                    <FontAwesome name="exchange" size={12} color="#fff" />
+                    <Text style={styles.actionBtnText}>{item.subscription_status === 'active' ? 'Change Plan' : 'Activate'}</Text>
+                  </TouchableOpacity>
                   {(item.subscription_status === 'active' || item.subscription_status === 'approved' || item.subscription_status === 'trial') && (
                     <TouchableOpacity
                       style={[styles.actionBtn, { backgroundColor: '#0f3460' }]}
@@ -581,6 +656,27 @@ export default function PlatformAdminScreen() {
                     <FontAwesome name="file-text-o" size={12} color="#fff" />
                     <Text style={styles.actionBtnText}>{item.is_efris_enabled ? 'EFRIS ✓' : 'EFRIS'}</Text>
                   </TouchableOpacity>
+
+                  {item.is_disabled ? (
+                    <TouchableOpacity
+                      style={[styles.actionBtn, { backgroundColor: '#4CAF50' }]}
+                      onPress={() => handleEnable(item)}
+                    >
+                      <FontAwesome name="check-circle" size={12} color="#fff" />
+                      <Text style={styles.actionBtnText}>Enable</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <TouchableOpacity
+                      style={[styles.actionBtn, { backgroundColor: '#333' }]}
+                      onPress={() => {
+                        setSelectedBiz(item);
+                        setDisableModal(true);
+                      }}
+                    >
+                      <FontAwesome name="pause-circle" size={12} color="#fff" />
+                      <Text style={styles.actionBtnText}>Disable</Text>
+                    </TouchableOpacity>
+                  )}
                   <TouchableOpacity
                     style={[styles.actionBtn, { backgroundColor: (item.active_devices || 0) > 0 ? '#FF9800' : '#555' }]}
                     onPress={async () => {
@@ -951,6 +1047,49 @@ export default function PlatformAdminScreen() {
         </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* ══════ DISABLE MODAL ══════ */}
+      <Modal visible={disableModal} transparent animationType="slide">
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>🚫 Disable Business</Text>
+            <Text style={styles.modalSubtitle}>{selectedBiz?.name}</Text>
+
+            <Text style={{ color: '#aaa', fontSize: 13, textAlign: 'center', marginBottom: 20 }}>
+              Users from this business will be logged out and cannot re-access the system until enabled.
+            </Text>
+
+            <Text style={styles.formLabel}>Reason for Disabling</Text>
+            <TextInput
+              style={[styles.modalInput, { height: 80, textAlignVertical: 'top' }]}
+              placeholder="e.g. Non-payment, Policy Violation..."
+              placeholderTextColor="#555"
+              value={disableReason}
+              onChangeText={setDisableReason}
+              multiline
+            />
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity style={styles.modalCancel} onPress={() => setDisableModal(false)}>
+                <Text style={{ color: '#fff' }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.modalConfirm, { backgroundColor: '#8B1A1A' }]} 
+                onPress={handleDisable} 
+                disabled={disabling}
+              >
+                {disabling ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={{ color: '#fff', fontWeight: '700' }}>Confirm Disable</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
@@ -989,6 +1128,8 @@ const styles = StyleSheet.create({
   bizActions: { flexDirection: 'row', gap: 8, marginTop: 10, backgroundColor: 'transparent' },
   actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 },
   actionBtnText: { color: '#fff', fontSize: 11, fontWeight: '600' },
+  miniStat: { color: '#666', fontSize: 11, fontWeight: 'bold', backgroundColor: '#0f3460', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  miniStatWarn: { color: '#fff', backgroundColor: '#8B1A1A' },
 
   // Payment card
   payCard: { backgroundColor: '#16213e', borderRadius: 12, padding: 14, marginHorizontal: 12, marginBottom: 8, borderWidth: 1, borderColor: '#0f3460' },

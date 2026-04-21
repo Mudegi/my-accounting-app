@@ -26,6 +26,10 @@ type Business = {
   id: string;
   name: string;
   tin: string | null;
+  phone: string | null;
+  email: string | null;
+  address: string | null;
+  receipt_footer: string | null;
   is_efris_enabled: boolean;
   efris_api_key: string | null;
   efris_api_url: string | null;
@@ -34,6 +38,8 @@ type Business = {
   default_currency: string;
   subscription_status: 'trial' | 'active' | 'approved' | 'past_due' | 'cancelled' | 'expired' | null;
   subscription_ends_at: string | null;
+  logo_url: string | null;
+  fiscal_year_start_month: number;
 };
 
 type Branch = {
@@ -42,6 +48,15 @@ type Branch = {
   name: string;
   location: string | null;
   is_efris_enabled: boolean;
+};
+
+export type TaxRate = {
+  id: string;
+  name: string;
+  code: string;
+  rate: number;
+  is_active: boolean;
+  is_default: boolean;
 };
 
 type AuthContextType = {
@@ -54,6 +69,7 @@ type AuthContextType = {
   loading: boolean;
   isInitializing: boolean;
   currency: Currency;
+  taxes: TaxRate[];
   fmt: (amount: number) => string;
   subscriptionStatus: SubscriptionStatus | null;
   isSuperAdmin: boolean;
@@ -66,6 +82,7 @@ type AuthContextType = {
   refreshBusiness: () => Promise<void>;
   reloadUserData: () => Promise<void>;
   refreshSubscription: () => Promise<void>;
+  hasFeature: (feature: string) => boolean;
 };
 
 const AuthContext = createContext<AuthContextType>({
@@ -75,6 +92,7 @@ const AuthContext = createContext<AuthContextType>({
   business: null,
   branches: [],
   currentBranch: null,
+  taxes: [],
   loading: true,
   isInitializing: false,
   currency: { code: 'UGX', name: 'Ugandan Shilling', symbol: 'UGX', decimal_places: 0 },
@@ -90,6 +108,7 @@ const AuthContext = createContext<AuthContextType>({
   refreshBusiness: async () => {},
   reloadUserData: async () => {},
   refreshSubscription: async () => {},
+  hasFeature: () => false,
 });
 
 export const useAuth = () => useContext(AuthContext);
@@ -101,6 +120,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [business, setBusiness] = useState<Business | null>(null);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [currentBranch, setCurrentBranch] = useState<Branch | null>(null);
+  const [taxes, setTaxes] = useState<TaxRate[]>([]);
   const [loading, setLoading] = useState(true);
   const [isInitializing, setIsInitializing] = useState(false);
   const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatus | null>(null);
@@ -276,6 +296,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } else if (branchesData.length > 0) {
           setCurrentBranch(branchesData[0]);
         }
+        }
+      }
+
+      // Load Taxes
+      const { data: taxesData } = await supabase
+        .from('tax_rates')
+        .select('*')
+        .eq('business_id', profileData.business_id)
+        .eq('is_active', true)
+        .order('rate', { ascending: false });
+
+      if (taxesData) {
+        setTaxes(taxesData.map((t: any) => ({
+          id: t.id,
+          name: t.name,
+          code: t.code,
+          rate: Number(t.rate),
+          is_active: t.is_active,
+          is_default: t.is_default
+        })));
       }
     } catch (error: any) {
       console.error('Error loading user data:', error);
@@ -322,7 +362,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return true;
   };
 
-  const signUp = async (email: string, password: string, fullName: string, businessName: string) => {
+  const signUp = async (email: string, password: string, fullName: string, businessName: string, country: string, currency: string) => {
     try {
       setIsInitializing(true);
       // 1. Create the auth user
@@ -342,6 +382,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           p_user_id: authData.user.id,
           p_full_name: fullName,
           p_business_name: businessName,
+          p_country: country,
+          p_currency: currency,
         });
 
         if (setupError) {
@@ -432,6 +474,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const fmt = (amount: number) => formatCurrency(amount, business?.default_currency || 'UGX');
   const isSuperAdmin = profile?.is_super_admin === true;
 
+  const hasFeature = (feature: string) => {
+    if (isSuperAdmin) return true;
+    if (!subscriptionStatus?.active) return false;
+    return subscriptionStatus.features?.includes(feature) || false;
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -441,6 +489,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         business,
         branches,
         currentBranch,
+        taxes,
         loading,
         isInitializing,
         currency,
@@ -456,6 +505,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         refreshBusiness,
         reloadUserData,
         refreshSubscription,
+        hasFeature,
       }}
     >
       {children}

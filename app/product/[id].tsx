@@ -11,6 +11,7 @@ import {
   Platform,
 } from 'react-native';
 import { Text, View } from '@/components/Themed';
+import UnitSearchModal from '@/components/UnitSearchModal';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 import { CameraView, useCameraPermissions } from 'expo-camera';
@@ -21,14 +22,13 @@ import {
   registerProduct as efrisRegisterProduct,
   EFRIS_UNIT_MAP,
   EFRIS_UNITS,
-  EFRIS_TAX_CATEGORIES,
   type EfrisConfig,
 } from '@/lib/efris';
 
 type Category = { id: string; name: string };
 
 export default function ProductFormScreen() {
-  const { business, currentBranch, fmt, currency } = useAuth();
+  const { business, currentBranch, fmt, currency, hasFeature, taxes } = useAuth();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const isNew = id === 'new';
@@ -57,7 +57,8 @@ export default function ProductFormScreen() {
   const [efrisProductCode, setEfrisProductCode] = useState<string | null>(null);
   const [efrisRegisteredAt, setEfrisRegisteredAt] = useState<string | null>(null);
   const [efrisRegistering, setEfrisRegistering] = useState(false);
-  const efrisEnabled = business?.is_efris_enabled ?? false;
+  const [showUnitSearch, setShowUnitSearch] = useState(false);
+  const efrisEnabled = (business?.is_efris_enabled ?? false) && hasFeature('efris');
 
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -103,7 +104,11 @@ export default function ProductFormScreen() {
   useEffect(() => {
     loadCategories();
     if (!isNew && id) loadProduct(id);
-  }, [id]);
+    else if (isNew) {
+      const defTax = taxes.find(t => t.is_default);
+      if (defTax) setTaxCategoryCode(defTax.code);
+    }
+  }, [id, taxes]);
 
   const loadCategories = async () => {
     if (!business) return;
@@ -142,12 +147,15 @@ export default function ProductFormScreen() {
       setEfrisProductCode(data.efris_product_code || null);
       setEfrisRegisteredAt(data.efris_registered_at || null);
       const inv = (data as any).inventory?.[0];
-      if (inv) {
-        setSellingPrice(inv.selling_price?.toString() || '');
-        setCostPrice(inv.avg_cost_price?.toString() || '');
-        setQuantity(inv.quantity?.toString() || '0');
-        setReorderLevel(inv.reorder_level?.toString() || '5');
+        if (inv) {
+          setSellingPrice(inv.selling_price?.toString() || '');
+          setCostPrice(inv.avg_cost_price?.toString() || '');
+          setQuantity(inv.quantity?.toString() || '0');
+          setReorderLevel(inv.reorder_level?.toString() || '5');
+        }
       }
+    } catch (e: any) {
+      console.error('Error loading product:', e);
     }
   };
 
@@ -173,6 +181,20 @@ export default function ProductFormScreen() {
     setEfrisRegistering(false); // Ensure only this button's spinner shows
     try {
       if (isNew) {
+        // Enforce product limit for new products
+        const { data: limitCheck, error: limitError } = await supabase.rpc('check_product_limit', {
+          p_business_id: business.id,
+        });
+
+        if (limitCheck && !limitCheck.allowed) {
+          Alert.alert(
+            'Product Limit Reached',
+            `Your plan allows up to ${limitCheck.max_products} products. You currently have ${limitCheck.current_count}.\n\nPlease upgrade your plan to add more products.`
+          );
+          setSaving(false);
+          return;
+        }
+
         // Create product
         const { data: product, error: productError } = await supabase
           .from('products')
@@ -268,7 +290,9 @@ export default function ProductFormScreen() {
     setName(''); setBarcode(''); setSku(''); setDescription('');
     setUnit('101'); setIsService(false); setSellingPrice(''); setCostPrice('');
     setQuantity('0'); setReorderLevel('5'); setCategoryId(''); setImageUri(null);
-    setCommodityCode(''); setTaxCategoryCode('01');
+    setCommodityCode(''); 
+    const defTax = taxes.find(t => t.is_default);
+    setTaxCategoryCode(defTax?.code || '01');
     setEfrisProductCode(null); setEfrisRegisteredAt(null); setProductId(null);
   };
 
@@ -579,6 +603,22 @@ export default function ProductFormScreen() {
                 ))}
               </View>
             </ScrollView>
+
+            <TouchableOpacity 
+              style={styles.searchUnitsBtn}
+              onPress={() => setShowUnitSearch(true)}
+            >
+              <FontAwesome name="search" size={12} color="#e94560" />
+              <Text style={styles.searchUnitsText}>
+                {EFRIS_UNITS.find(u => u.code === unit) ? 'Search 500+ other units...' : `Selected: ${unit} (Search others...)`}
+              </Text>
+            </TouchableOpacity>
+
+            <UnitSearchModal
+              visible={showUnitSearch}
+              onClose={() => setShowUnitSearch(false)}
+              onSelect={(u) => setUnit(u.code)}
+            />
           </View>
 
           {/* Category */}
@@ -675,7 +715,7 @@ export default function ProductFormScreen() {
           </View>
 
           {/* Save Button(s) */}
-          {efrisEnabled ? (
+          {(efrisEnabled && hasFeature('efris') && !efrisProductCode) ? (
             <View style={styles.twoButtonRow}>
               <TouchableOpacity
                 style={[styles.saveButton, { flex: 1, marginBottom: 0 }, saving && { opacity: 0.6 }]}
@@ -692,7 +732,7 @@ export default function ProductFormScreen() {
                 disabled={saving || efrisRegistering}
               >
                 {efrisRegistering ? <ActivityIndicator color="#fff" size="small" /> : (
-                  <Text style={styles.efrisRegisterText}>Add & Register With EFRIS</Text>
+                  <Text style={styles.efrisRegisterText}>{isNew ? 'Add & Register With EFRIS' : 'Save & Register'}</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -709,7 +749,7 @@ export default function ProductFormScreen() {
           )}
 
           {/* EFRIS Section (only when enabled OR when product has EFRIS data) */}
-          {(efrisEnabled || efrisProductCode) && (
+          {((efrisEnabled && hasFeature('efris')) || efrisProductCode) && (
             <>
               <Text style={[styles.groupLabel, { color: '#7C3AED' }]}>🇺🇬 EFRIS TAX REGISTRATION</Text>
 
@@ -729,32 +769,19 @@ export default function ProductFormScreen() {
                 <Text style={styles.hint}>Sets the default tax rate when selling this product. Can be changed per sale.</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                   <View style={styles.chipRow}>
-                    {EFRIS_TAX_CATEGORIES.filter(tc => ['01','02','03'].includes(tc.code)).map((tc) => (
+                    {taxes.map((tc) => (
                       <TouchableOpacity
                         key={tc.code}
                         style={[styles.chip, taxCategoryCode === tc.code && styles.efrisChipActive]}
                         onPress={() => setTaxCategoryCode(tc.code)}
-                        disabled={!efrisEnabled}
                       >
-                        <Text style={[styles.chipText, taxCategoryCode === tc.code && styles.chipTextActive]}>{tc.label}</Text>
+                        <Text style={[styles.chipText, taxCategoryCode === tc.code && styles.chipTextActive]}>{tc.name}</Text>
                       </TouchableOpacity>
                     ))}
                   </View>
                 </ScrollView>
               </View>
 
-              {/* Register Button - hide if integration is off */}
-              {efrisEnabled && efrisProductCode && !isNew && (
-                <TouchableOpacity
-                  style={[styles.efrisRegisterBtn, { marginTop: 8 }, efrisRegistering && { opacity: 0.6 }]}
-                  onPress={handleEfrisRegister}
-                  disabled={efrisRegistering}
-                >
-                  {efrisRegistering ? <ActivityIndicator color="#fff" size="small" /> : (
-                    <Text style={styles.efrisRegisterText}>Re-register with EFRIS</Text>
-                  )}
-                </TouchableOpacity>
-              )}
             </>
           )}
 
@@ -792,6 +819,8 @@ const styles = StyleSheet.create({
   inputFlex: { flex: 1 },
   inputRow: { flexDirection: 'row', gap: 10, alignItems: 'center' },
   textarea: { height: 90, textAlignVertical: 'top' },
+  searchUnitsBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12, paddingVertical: 10, paddingHorizontal: 12, backgroundColor: '#16213e', borderRadius: 10, borderWidth: 1, borderColor: '#0f3460' },
+  searchUnitsText: { color: '#e94560', fontSize: 13, fontWeight: 'bold' },
   scanButton: {
     backgroundColor: '#0f3460',
     width: 50,

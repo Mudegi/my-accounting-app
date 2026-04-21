@@ -5,6 +5,7 @@ import {
   ActivityIndicator,
   ScrollView,
   Alert,
+  Image,
 } from 'react-native';
 import { Text, View } from '@/components/Themed';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -107,15 +108,44 @@ export default function ReceiptScreen() {
         setEfrisData(efrisResp);
       }
 
+      // Fetch branch details for phone/location
+      let branchPhone = null;
+      let branchLocation = null;
+      if (sale.branch_id) {
+        const { data: br } = await supabase
+          .from('branches')
+          .select('phone, location, name')
+          .eq('id', sale.branch_id)
+          .single();
+        if (br) {
+          branchPhone = br.phone;
+          branchLocation = br.location;
+        }
+      }
+
+      // Fetch debt payments for upfront/partial calculations
+      const { data: pmtData } = await supabase
+        .from('debt_payments')
+        .select('amount')
+        .eq('sale_id', saleId);
+      const upfrontPaid = (pmtData || []).reduce((sum, p) => sum + Number(p.amount), 0);
+
       const data: ReceiptData = {
         businessName: business?.name || 'Business',
         businessTin: business?.tin || null,
+        businessEmail: business?.email || null,
+        businessPhone: business?.phone || null,
+        businessAddress: business?.address || null,
         branchName: currentBranch?.name || '',
+        branchPhone: branchPhone,
+        branchLocation: branchLocation,
+        footerMessage: business?.receipt_footer || null,
+        logoUrl: business?.logo_url || null,
         saleId: sale.id,
         invoiceNumber: sale.invoice_number || null,
         date: sale.created_at || new Date().toISOString(),
         sellerName,
-        paymentMethod: sale.payment_method || sale.efris_payment_code || 'cash',
+        paymentMethod: sale.payment_method || 'cash',
         items: receiptItems,
         subtotal: sale.subtotal || 0,
         taxAmount: sale.tax_amount || 0,
@@ -129,6 +159,8 @@ export default function ReceiptScreen() {
         customerName: sale.customer_name || null,
         customerTin: sale.customer_tin || null,
         currencySymbol: currency.symbol,
+        amountPaid: sale.payment_method === 'credit' ? upfrontPaid : sale.total_amount,
+        balanceDue: sale.payment_method === 'credit' ? (sale.total_amount - upfrontPaid) : 0,
       };
 
       setReceiptData(data);
@@ -199,14 +231,32 @@ export default function ReceiptScreen() {
 
           {/* ── EFRIS HEADER or SIMPLE header ────────── */}
           {isFiscal ? (
-            <View style={s.efrisHeaderBar}>
-              <Text style={s.efrisHeaderText}>EFRIS e-INVOICE / TAX INVOICE</Text>
-            </View>
+            <>
+              <View style={s.headerMain}>
+                {receiptData.logoUrl && <Image source={{ uri: receiptData.logoUrl }} style={s.logo} resizeMode="contain" />}
+                <Text style={[s.receiptBizName, { textAlign: 'left' }]}>{receiptData.businessName}</Text>
+              </View>
+              <View style={s.efrisHeaderBar}>
+                <Text style={s.efrisHeaderText}>EFRIS e-INVOICE / TAX INVOICE</Text>
+              </View>
+            </>
           ) : (
             <>
-              <Text style={s.receiptBizName}>{receiptData.businessName}</Text>
+              <View style={s.headerMain}>
+                {receiptData.logoUrl && <Image source={{ uri: receiptData.logoUrl }} style={s.logo} resizeMode="contain" />}
+                <Text style={[s.receiptBizName, { textAlign: 'left' }]}>{receiptData.businessName}</Text>
+              </View>
               {receiptData.businessTin && <Text style={s.receiptMeta}>TIN: {receiptData.businessTin}</Text>}
               <Text style={s.receiptMeta}>{receiptData.branchName}</Text>
+              {(receiptData.branchLocation || receiptData.businessAddress) && (
+                <Text style={s.receiptMeta}>{receiptData.branchLocation || receiptData.businessAddress}</Text>
+              )}
+              {(receiptData.branchPhone || receiptData.businessPhone) && (
+                <Text style={s.receiptMeta}>Tel: {receiptData.branchPhone || receiptData.businessPhone}</Text>
+              )}
+              {receiptData.businessEmail && <Text style={s.receiptMeta}>{receiptData.businessEmail}</Text>}
+              <Text style={s.receiptMeta}>CURRENCY: {receiptData.currencySymbol}</Text>
+              <Text style={[s.receiptBizName, { fontSize: 12, marginTop: 8, textDecorationLine: 'underline' }]}>SALES INVOICE</Text>
               <View style={s.divider} />
             </>
           )}
@@ -373,14 +423,30 @@ export default function ReceiptScreen() {
                   <Text style={[s.totalValue, { color: '#e94560' }]}>-{fmtCurrency(receiptData.discountAmount)}</Text>
                 </View>
               )}
-              <View style={s.totalRow}>
-                <Text style={s.totalLabel}>Tax</Text>
-                <Text style={s.totalValue}>{fmtCurrency(receiptData.taxAmount)}</Text>
-              </View>
+              {business?.is_efris_enabled && (
+                <View style={s.totalRow}>
+                  <Text style={s.totalLabel}>Tax</Text>
+                  <Text style={s.totalValue}>{fmtCurrency(receiptData.taxAmount)}</Text>
+                </View>
+              )}
               <View style={s.grandTotalRow}>
                 <Text style={s.grandTotalLabel}>TOTAL</Text>
                 <Text style={s.grandTotalValue}>{fmtCurrency(receiptData.totalAmount)}</Text>
               </View>
+              
+              {receiptData.amountPaid !== undefined && receiptData.amountPaid > 0 && receiptData.paymentMethod === 'credit' && (
+                <>
+                  <View style={s.totalRow}>
+                    <Text style={s.totalLabel}>Amount Paid</Text>
+                    <Text style={s.totalValue}>{fmtCurrency(receiptData.amountPaid)}</Text>
+                  </View>
+                  <View style={s.totalRow}>
+                    <Text style={[s.totalLabel, { fontWeight: 'bold', color: '#000' }]}>BALANCE DUE</Text>
+                    <Text style={[s.totalValue, { fontWeight: 'bold', color: '#e94560' }]}>{fmtCurrency(receiptData.balanceDue || 0)}</Text>
+                  </View>
+                </>
+              )}
+
               <View style={s.paymentRow}>
                 <Text style={s.paymentText}>Payment: {PAYMENT_LABELS[receiptData.paymentMethod] || receiptData.paymentMethod}</Text>
               </View>
@@ -408,7 +474,7 @@ export default function ReceiptScreen() {
           ) : null}
 
           <View style={s.divider} />
-          <Text style={s.thankYou}>Thank you for your purchase!</Text>
+          <Text style={s.thankYou}>{receiptData.footerMessage || 'Thank you for your purchase!'}</Text>
           <Text style={s.poweredBy}>Powered by YourBooks Lite</Text>
         </View>
       </ScrollView>
@@ -481,6 +547,8 @@ const s = StyleSheet.create({
   metaValue: { fontSize: 10, color: '#222', textAlign: 'right', maxWidth: '60%' },
 
   // ── Simple header ──
+  headerMain: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 4, backgroundColor: 'transparent' },
+  logo: { height: 40, width: 60 },
   receiptBizName: {
     fontSize: 16, fontWeight: 'bold', textAlign: 'center', color: '#000', textTransform: 'uppercase', letterSpacing: 1,
   },

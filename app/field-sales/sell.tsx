@@ -226,7 +226,7 @@ export default function FieldSellScreen() {
     setCart(prev => {
       const existing = prev.find(c => c.assignment_id === assignment.id);
       if (existing) {
-        if (existing.quantity >= existing.max_qty) {
+        if (!existing.is_service && existing.quantity >= existing.max_qty) {
           Alert.alert('Stock Limit', `Only ${existing.max_qty} unit(s) available.`);
           return prev;
         }
@@ -256,7 +256,7 @@ export default function FieldSellScreen() {
     setCart(prev =>
       prev
         .map(c => c.assignment_id === assignmentId
-          ? { ...c, quantity: Math.max(0, Math.min(c.max_qty, c.quantity + delta)) }
+          ? { ...c, quantity: Math.max(0, c.is_service ? (c.quantity + delta) : Math.min(c.max_qty, c.quantity + delta)) }
           : c
         )
         .filter(c => c.quantity > 0)

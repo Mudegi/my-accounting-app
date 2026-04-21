@@ -20,6 +20,9 @@ import {
 } from '@/lib/accounting';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
+import { BarChart, PieChart, LineChart } from 'react-native-gifted-charts';
+import { aggregateTrendData, aggregateExpenseChart, aggregateProductShare, type TrendData } from '@/lib/report-utils';
+import { LinearGradient } from 'expo-linear-gradient';
 
 type BranchReport = {
   branch_id: string;
@@ -38,7 +41,7 @@ type TopProduct = {
   revenue: number;
 };
 
-type ReportTab = 'dashboard' | 'trial_balance' | 'pnl' | 'balance_sheet' | 'vat';
+type ReportTab = 'dashboard' | 'expenses' | 'trial_balance' | 'pnl' | 'balance_sheet' | 'vat';
 
 export default function ReportsScreen() {
   const { business, branches, currentBranch, profile, fmt } = useAuth();
@@ -52,9 +55,11 @@ export default function ReportsScreen() {
   const [totalExpenses, setTotalExpenses] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<ReportTab>('dashboard');
+  const [trendData, setTrendData] = useState<TrendData[]>([]);
 
   // GL-based report data
   const [trialBalance, setTrialBalance] = useState<AccountBalance[]>([]);
+  const [expenseDetails, setExpenseDetails] = useState<any[]>([]);
   const [glLoading, setGlLoading] = useState(false);
 
   const getDateRange = () => {
@@ -80,7 +85,7 @@ export default function ReportsScreen() {
 
     let salesQuery = supabase
       .from('sales')
-      .select(`branch_id, total_amount, sale_items(quantity, unit_price, cost_price)`)
+      .select(`branch_id, total_amount, created_at, sale_items(quantity, unit_price, cost_price)`)
       .eq('business_id', business.id)
       .eq('status', 'completed')
       .gte('created_at', from);
@@ -139,6 +144,11 @@ export default function ReportsScreen() {
     setTotalProfit(totalRev - totalCost);
     setTotalExpenses(totalExp);
 
+    // Trend Data
+    if (salesData) {
+      setTrendData(aggregateTrendData(salesData, period));
+    }
+
     // Top Products
     let itemsQuery = supabase
       .from('sale_items')
@@ -162,6 +172,36 @@ export default function ReportsScreen() {
     setTopProducts(Object.values(productMap).sort((a, b) => b.revenue - a.revenue).slice(0, 5));
   }, [business, branches, currentBranch, period, canSeeAllBranches]);
 
+  const loadExpenses = useCallback(async () => {
+    if (!business) return;
+    setGlLoading(true);
+    const from = getDateRange().split('T')[0];
+    let query = supabase
+      .from('expenses')
+      .select('*, branches(name)')
+      .eq('business_id', business.id)
+      .gte('date', from)
+      .order('date', { ascending: false });
+
+    if (!canSeeAllBranches && currentBranch) {
+      query = query.eq('branch_id', currentBranch.id);
+    }
+
+    const { data } = await query;
+    setExpenseDetails(data || []);
+    
+    // Also load Trial Balance to get category totals for the summary
+    const tb = await getTrialBalance({
+      businessId: business.id,
+      branchId: canSeeAllBranches ? null : currentBranch?.id,
+      fromDate: from,
+      toDate: new Date().toISOString().split('T')[0],
+      fiscalYearStartMonth: business.fiscal_year_start_month || 1,
+    });
+    setTrialBalance(tb);
+    setGlLoading(false);
+  }, [business, currentBranch, period, canSeeAllBranches]);
+
   const loadGL = useCallback(async () => {
     if (!business) return;
     setGlLoading(true);
@@ -173,6 +213,7 @@ export default function ReportsScreen() {
         branchId: canSeeAllBranches ? null : currentBranch?.id,
         fromDate,
         toDate,
+        fiscalYearStartMonth: business.fiscal_year_start_month || 1,
       });
       setTrialBalance(tb);
     } catch (e) {
@@ -184,10 +225,12 @@ export default function ReportsScreen() {
   const load = useCallback(async () => {
     if (activeTab === 'dashboard') {
       await loadDashboard();
+    } else if (activeTab === 'expenses') {
+      await loadExpenses();
     } else {
       await loadGL();
     }
-  }, [activeTab, loadDashboard, loadGL]);
+  }, [activeTab, loadDashboard, loadExpenses, loadGL]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
@@ -201,6 +244,7 @@ export default function ReportsScreen() {
 
   const tabs: { key: ReportTab; label: string; icon: string }[] = [
     { key: 'dashboard', label: 'Dashboard', icon: 'tachometer' },
+    { key: 'expenses', label: 'Expenses', icon: 'money' },
     { key: 'trial_balance', label: 'Trial Bal.', icon: 'balance-scale' },
     { key: 'pnl', label: 'P&L', icon: 'line-chart' },
     { key: 'balance_sheet', label: 'Bal. Sheet', icon: 'building' },
@@ -239,11 +283,60 @@ export default function ReportsScreen() {
         </View>
       </View>
 
+      <View style={styles.chartCard}>
+        <Text style={styles.chartTitle}>Revenue Trend ({periodLabels[period]})</Text>
+        <BarChart
+          data={trendData.map(d => ({ value: d.value, label: d.label }))}
+          barWidth={22}
+          noOfSections={3}
+          barBorderRadius={4}
+          frontColor="#e94560"
+          yAxisThickness={0}
+          xAxisThickness={0}
+          hideRules
+          labelTextStyle={{ color: '#aaa', fontSize: 10 }}
+          yAxisTextStyle={{ color: '#aaa', fontSize: 10 }}
+          isAnimated
+        />
+      </View>
+
+      {topProducts.length > 0 && (
+        <View style={styles.chartCard}>
+          <Text style={styles.chartTitle}>Top Products Share</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: 'transparent' }}>
+            <PieChart
+              data={aggregateProductShare(topProducts)}
+              donut
+              showGradient
+              sectionAutoFocus
+              radius={70}
+              innerRadius={50}
+              innerCircleColor={'#16213e'}
+              centerLabelComponent={() => (
+                 <View style={{justifyContent: 'center', alignItems: 'center', backgroundColor: 'transparent'}}>
+                    <Text style={{fontSize: 20, color: 'white', fontWeight: 'bold'}}>{topProducts.length}</Text>
+                    <Text style={{fontSize: 10, color: 'white'}}>Items</Text>
+                 </View>
+              )}
+            />
+            <View style={{ marginLeft: 20, backgroundColor: 'transparent', gap: 8 }}>
+               {topProducts.slice(0, 3).map((p, i) => (
+                 <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'transparent' }}>
+                    <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: ['#e94560','#533483','#4CAF50'][i] }} />
+                    <Text style={{ color: '#ccc', fontSize: 11 }}>{p.product_name}</Text>
+                 </View>
+               ))}
+            </View>
+          </View>
+        </View>
+      )}
+
       {branchReports.length > 0 && (
         <>
           <Text style={styles.sectionTitle}>Branch Performance</Text>
           {branchReports.map((b) => (
             <View key={b.branch_id} style={styles.branchCard}>
+... [rest of branchReports map remains same]
               <View style={styles.branchHeader}>
                 <Text style={styles.branchName}>{b.branch_name}</Text>
                 <Text style={styles.branchTx}>{b.transactions} sales</Text>
@@ -304,59 +397,142 @@ export default function ReportsScreen() {
     </>
   );
 
-  const renderTrialBalance = () => {
-    const totalDR = trialBalance.reduce((s, a) => s + a.total_debit, 0);
-    const totalCR = trialBalance.reduce((s, a) => s + a.total_credit, 0);
-    const balanced = Math.abs(totalDR - totalCR) < 1;
+  const renderExpenses = () => {
+    // Group totals by category from trial balance
+    const expenseAccounts = trialBalance.filter(a => a.account_type === 'expense' && a.code !== ACC.COGS && a.code !== ACC.STOCK_TRANSFERS);
 
     return (
       <>
-        <View style={[styles.glHeader, { backgroundColor: balanced ? '#2d6a4f' : '#8B1A1A' }]}>
-          <FontAwesome name={balanced ? 'check-circle' : 'exclamation-triangle'} size={16} color="#fff" />
-          <Text style={styles.glHeaderText}>
-            {balanced ? 'Books are balanced' : `Imbalance: ${fmt(Math.round(totalDR - totalCR))}`}
-          </Text>
+        <Text style={styles.sectionTitle}>Expense Analysis</Text>
+        {expenseAccounts.length > 0 && (
+          <View style={[styles.chartCard, { alignItems: 'center' }]}>
+            <PieChart
+              data={aggregateExpenseChart(trialBalance)}
+              radius={80}
+              showText
+              textColor="white"
+              textSize={10}
+              focusOnPress
+              showTextBackground
+              textBackgroundRadius={16}
+            />
+          </View>
+        )}
+        
+        <View style={styles.summaryGrid}>
+... [rest of summaryGrid remains same]
+          {expenseAccounts.length === 0 ? (
+            <Text style={{ color: '#555', paddingHorizontal: 16 }}>No expenses in this period</Text>
+          ) : (
+            expenseAccounts.map(a => (
+              <View key={a.account_id} style={[styles.summaryCard, { backgroundColor: '#16213e', width: '47%' }]}>
+                <Text style={[styles.summaryValue, { color: '#e94560' }]}>{fmt(a.balance)}</Text>
+                <Text style={styles.summaryLabel}>{a.name}</Text>
+              </View>
+            ))
+          )}
         </View>
 
-        {/* Table Header */}
-        <View style={styles.tableHeader}>
-          <Text style={[styles.tableHeaderText, { flex: 2 }]}>Account</Text>
-          <Text style={[styles.tableHeaderText, { flex: 1, textAlign: 'right' }]}>Debit</Text>
-          <Text style={[styles.tableHeaderText, { flex: 1, textAlign: 'right' }]}>Credit</Text>
-        </View>
-
-        {trialBalance.length === 0 && !glLoading && (
+        <Text style={styles.sectionTitle}>Detailed Statement</Text>
+        {expenseDetails.length === 0 && !glLoading && (
           <View style={styles.empty}>
-            <Text style={styles.emptyText}>No journal entries for this period</Text>
+            <Text style={styles.emptyText}>No transactions found</Text>
           </View>
         )}
 
-        {trialBalance.map(a => (
-          <View key={a.account_id} style={styles.tableRow}>
-            <View style={{ flex: 2, backgroundColor: 'transparent' }}>
-              <Text style={styles.tableAccName}>{a.code} {a.name}</Text>
-              <Text style={styles.tableAccType}>{a.account_type}</Text>
+        {expenseDetails.map((item) => (
+          <View key={item.id} style={styles.productRow}>
+            <View style={[styles.productRank, { backgroundColor: '#0f3460' }]}>
+              <FontAwesome name="money" size={14} color="#aaa" />
             </View>
-            <Text style={[styles.tableAmount, { flex: 1, textAlign: 'right' }]}>
-              {a.total_debit > 0 ? a.total_debit.toLocaleString() : '-'}
-            </Text>
-            <Text style={[styles.tableAmount, { flex: 1, textAlign: 'right' }]}>
-              {a.total_credit > 0 ? a.total_credit.toLocaleString() : '-'}
-            </Text>
+            <View style={styles.productInfo}>
+              <Text style={styles.productName}>{item.category}</Text>
+              {item.description && <Text style={styles.productQty}>{item.description}</Text>}
+              <Text style={{ color: '#555', fontSize: 11, marginTop: 2 }}>
+                {item.date} {canSeeAllBranches && item.branches?.name ? `· ${item.branches.name}` : ''}
+              </Text>
+            </View>
+            <Text style={[styles.productRevenue, { color: '#e94560' }]}>{fmt(Number(item.amount))}</Text>
           </View>
         ))}
+      </>
+    );
+  };
 
-        {/* Totals */}
-        <View style={[styles.tableRow, { borderTopWidth: 2, borderTopColor: '#e94560' }]}>
-          <Text style={[styles.tableAccName, { flex: 2, fontWeight: 'bold' }]}>TOTALS</Text>
-          <Text style={[styles.tableAmount, { flex: 1, textAlign: 'right', fontWeight: 'bold' }]}>
-            {Math.round(totalDR).toLocaleString()}
-          </Text>
-          <Text style={[styles.tableAmount, { flex: 1, textAlign: 'right', fontWeight: 'bold' }]}>
-            {Math.round(totalCR).toLocaleString()}
+  const renderTrialBalance = () => {
+    // Standard 4-column TB: Opening, DR Movement, CR Movement, Closing
+    const totalOpening = trialBalance.reduce((s, a) => {
+       const isDebitNormal = a.account_type === 'asset' || a.account_type === 'expense';
+       return s + (isDebitNormal ? a.opening_balance : -a.opening_balance);
+    }, 0);
+    const totalDR = trialBalance.reduce((s, a) => s + a.total_debit, 0);
+    const totalCR = trialBalance.reduce((s, a) => s + a.total_credit, 0);
+    
+    // Check if DR/CR movements are balanced
+    const balancedMov = Math.abs(totalDR - totalCR) < 1;
+
+    return (
+      <View style={{ backgroundColor: 'transparent' }}>
+        <View style={[styles.glHeader, { backgroundColor: balancedMov ? '#2d6a4f' : '#8B1A1A' }]}>
+          <FontAwesome name={balancedMov ? 'check-circle' : 'exclamation-triangle'} size={16} color="#fff" />
+          <Text style={styles.glHeaderText}>
+            {balancedMov ? 'Journal movements are balanced' : `DR/CR Imbalance: ${fmt(Math.round(totalDR - totalCR))}`}
           </Text>
         </View>
-      </>
+
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <View style={{ width: 600, backgroundColor: 'transparent' }}>
+            {/* Table Header */}
+            <View style={styles.tableHeader}>
+              <Text style={[styles.tableHeaderText, { flex: 2, minWidth: 150 }]}>Account</Text>
+              <Text style={[styles.tableHeaderText, { flex: 1, textAlign: 'right' }]}>Opening</Text>
+              <Text style={[styles.tableHeaderText, { flex: 1, textAlign: 'right' }]}>Debit</Text>
+              <Text style={[styles.tableHeaderText, { flex: 1, textAlign: 'right' }]}>Credit</Text>
+              <Text style={[styles.tableHeaderText, { flex: 1, textAlign: 'right' }]}>Closing</Text>
+            </View>
+
+            {trialBalance.length === 0 && !glLoading && (
+              <View style={styles.empty}>
+                <Text style={styles.emptyText}>No journal entries for this period</Text>
+              </View>
+            )}
+
+            {trialBalance.map(a => (
+              <View key={a.account_id} style={styles.tableRow}>
+                <View style={{ flex: 2, minWidth: 150, backgroundColor: 'transparent' }}>
+                  <Text style={styles.tableAccName}>{a.code} {a.name}</Text>
+                  <Text style={styles.tableAccType}>{a.account_type}</Text>
+                </View>
+                <Text style={[styles.tableAmount, { flex: 1, textAlign: 'right' }]}>
+                  {a.opening_balance !== 0 ? a.opening_balance.toLocaleString() : '-'}
+                </Text>
+                <Text style={[styles.tableAmount, { flex: 1, textAlign: 'right' }]}>
+                  {a.total_debit > 0 ? a.total_debit.toLocaleString() : '-'}
+                </Text>
+                <Text style={[styles.tableAmount, { flex: 1, textAlign: 'right' }]}>
+                  {a.total_credit > 0 ? a.total_credit.toLocaleString() : '-'}
+                </Text>
+                <Text style={[styles.tableAmount, { flex: 1, textAlign: 'right', fontWeight: 'bold' }]}>
+                  {a.balance.toLocaleString()}
+                </Text>
+              </View>
+            ))}
+
+            {/* Totals */}
+            <View style={[styles.tableRow, { borderTopWidth: 2, borderTopColor: '#e94560' }]}>
+              <Text style={[styles.tableAccName, { flex: 2, minWidth: 150, fontWeight: 'bold' }]}>TOTALS</Text>
+              <Text style={[styles.tableAmount, { flex: 1, textAlign: 'right', fontWeight: 'bold' }]}>-</Text>
+              <Text style={[styles.tableAmount, { flex: 1, textAlign: 'right', fontWeight: 'bold' }]}>
+                {Math.round(totalDR).toLocaleString()}
+              </Text>
+              <Text style={[styles.tableAmount, { flex: 1, textAlign: 'right', fontWeight: 'bold' }]}>
+                {Math.round(totalCR).toLocaleString()}
+              </Text>
+              <Text style={[styles.tableAmount, { flex: 1, textAlign: 'right', fontWeight: 'bold' }]}>-</Text>
+            </View>
+          </View>
+        </ScrollView>
+      </View>
     );
   };
 
@@ -536,6 +712,26 @@ export default function ReportsScreen() {
           </View>
         </View>
 
+        {(vat.outputVat > 0 || vat.inputVat > 0) && (
+          <View style={styles.chartCard}>
+            <Text style={styles.chartTitle}>VAT Comparison</Text>
+            <BarChart
+              data={[
+                { value: vat.outputVat, label: 'Output', frontColor: '#e94560' },
+                { value: vat.inputVat, label: 'Input', frontColor: '#4CAF50' },
+              ]}
+              barWidth={60}
+              spacing={40}
+              noOfSections={3}
+              yAxisThickness={0}
+              xAxisThickness={0}
+              hideRules
+              labelTextStyle={{ color: '#aaa', fontSize: 12 }}
+              yAxisTextStyle={{ color: '#aaa', fontSize: 10 }}
+            />
+          </View>
+        )}
+
         {vat.netPayable < 0 && (
           <View style={[styles.glHeader, { backgroundColor: '#2d6a4f', marginHorizontal: 16, marginTop: 10 }]}>
             <FontAwesome name="info-circle" size={14} color="#fff" />
@@ -628,8 +824,19 @@ export default function ReportsScreen() {
           ['Net VAT Payable to URA', vat.netPayable],
         ];
         csv = toCsvStr(headers, rows);
+      } else if (activeTab === 'expenses') {
+        type = 'ExpenseStatement';
+        const headers = ['Date', 'Category', 'Description', 'Branch', 'Amount'];
+        const rows = expenseDetails.map(e => [
+          e.date,
+          e.category,
+          e.description || '',
+          e.branches?.name || 'Main',
+          e.amount
+        ]);
+        csv = toCsvStr(headers, rows);
       } else {
-        Alert.alert('Info', 'Switch to P&L, Balance Sheet, Trial Balance, or VAT tab to export');
+        Alert.alert('Info', 'Switch to Expenses, P&L, Balance Sheet, Trial Balance, or VAT tab to export');
         return;
       }
 
@@ -690,6 +897,7 @@ export default function ReportsScreen() {
       )}
 
       {activeTab === 'dashboard' && renderDashboard()}
+      {activeTab === 'expenses' && renderExpenses()}
       {activeTab === 'trial_balance' && renderTrialBalance()}
       {activeTab === 'pnl' && renderPnL()}
       {activeTab === 'balance_sheet' && renderBalanceSheet()}
@@ -736,8 +944,27 @@ const styles = StyleSheet.create({
   summaryGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 16, gap: 10, backgroundColor: 'transparent' },
   summaryCard: { width: '47%', borderRadius: 14, padding: 14 },
   summaryValue: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
-  summaryLabel: { color: '#ccc', fontSize: 12, marginTop: 4 },
-
+  summaryLabel: { color: '#aaa', fontSize: 13, marginTop: 4 },
+  chartCard: {
+    backgroundColor: '#16213e',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 20,
+    marginHorizontal: 16,
+    borderWidth: 1,
+    borderColor: '#0f3460',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 8,
+  },
+  chartTitle: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 16,
+  },
   sectionTitle: { color: '#fff', fontSize: 16, fontWeight: 'bold', paddingHorizontal: 16, paddingTop: 20, paddingBottom: 10 },
 
   // Branch cards

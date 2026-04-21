@@ -58,6 +58,7 @@ export type SubscriptionStatus = {
   max_users?: number;
   max_products?: number;
   features?: string[];
+  billing_cycle?: 'monthly' | 'yearly';
 };
 
 // ── Payment method options ──

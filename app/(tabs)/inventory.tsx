@@ -34,7 +34,7 @@ type InventoryItem = {
 };
 
 export default function InventoryScreen() {
-  const { business, currentBranch, fmt, profile } = useAuth();
+  const { business, currentBranch, fmt, profile, subscriptionStatus, hasFeature } = useAuth();
   const router = useRouter();
 
   // Field-only salespeople see their assigned stock within the same tab
@@ -51,7 +51,7 @@ export default function InventoryScreen() {
   const [importing, setImporting] = useState(false);
 
   // EFRIS import state
-  const efrisEnabled = business?.is_efris_enabled ?? false;
+  const efrisEnabled = (business?.is_efris_enabled ?? false) && hasFeature('efris');
   const [efrisImporting, setEfrisImporting] = useState(false);
 
   const loadInventory = useCallback(async () => {

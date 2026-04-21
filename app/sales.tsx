@@ -1,10 +1,9 @@
-import React, { useState, useCallback } from 'react';
-import {
-  StyleSheet,
-  TouchableOpacity,
-  FlatList,
   RefreshControl,
   TextInput,
+  Modal,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { Text, View } from '@/components/Themed';
 import { supabase } from '@/lib/supabase';
@@ -26,6 +25,8 @@ type SaleRow = {
   branch_name: string;
   customer_name: string | null;
   item_count: number;
+  efris_status: string;
+  efris_error: string | null;
 };
 
 type Period = 'today' | 'week' | 'month' | '3months' | 'all';
@@ -45,9 +46,23 @@ export default function SalesScreen() {
   const [selectedBranch, setSelectedBranch] = useState<string>('all');
   const [selectedSeller, setSelectedSeller] = useState<string>('all');
   const [sellers, setSellers] = useState<{ id: string; name: string }[]>([]);
-  const [productFilter, setProductFilter] = useState('');
-  const [activeProductFilter, setActiveProductFilter] = useState('');
-  const [productStats, setProductStats] = useState<{ name: string; qty: number; revenue: number } | null>(null);
+  
+  // Product selection states
+  const [selectedProduct, setSelectedProduct] = useState<{ id: string; name: string } | null>(null);
+  const [showProductModal, setShowProductModal] = useState(false);
+  const [productSearchQuery, setProductSearchQuery] = useState('');
+  const [productSearchResults, setProductSearchResults] = useState<any[]>([]);
+  const [searchingProducts, setSearchingProducts] = useState(false);
+  const [productStats, setProductStats] = useState<{
+    name: string;
+    soldQty: number;
+    revenue: number;
+    cogs: number;
+    profit: number;
+    purchasedQty: number;
+    purchasedAmount: number;
+    currentStock: number;
+  } | null>(null);
 
   // Reset seller when branch changes
   React.useEffect(() => { setSelectedSeller('all'); }, [selectedBranch]);
@@ -83,11 +98,11 @@ export default function SalesScreen() {
     let productSaleIds: string[] | null = null;
 
     // Product filter: find matching sale IDs and compute stats
-    if (activeProductFilter) {
+    if (selectedProduct) {
       let itemQuery = supabase
         .from('sale_items')
-        .select('sale_id, quantity, line_total, sales!inner(business_id, created_at, branch_id, seller_id)')
-        .ilike('product_name', `%${activeProductFilter}%`)
+        .select('sale_id, quantity, line_total, cost_price, sales!inner(business_id, created_at, branch_id, seller_id)')
+        .eq('product_id', selectedProduct.id)
         .eq('sales.business_id', business.id);
 
       if (from) itemQuery = itemQuery.gte('sales.created_at', from);
@@ -95,15 +110,52 @@ export default function SalesScreen() {
       else if (!isAdmin && currentBranch) itemQuery = itemQuery.eq('sales.branch_id', currentBranch.id);
       if (selectedSeller !== 'all') itemQuery = itemQuery.eq('sales.seller_id', selectedSeller);
 
-      const { data: matchItems } = await itemQuery.limit(500);
+      const { data: matchItems } = await itemQuery.limit(1000);
 
-      if (matchItems && matchItems.length > 0) {
-        const totalQty = matchItems.reduce((s: number, i: any) => s + i.quantity, 0);
-        const totalRev = matchItems.reduce((s: number, i: any) => s + Number(i.line_total), 0);
-        setProductStats({ name: activeProductFilter, qty: totalQty, revenue: totalRev });
-        productSaleIds = [...new Set(matchItems.map((i: any) => i.sale_id))];
-      } else {
-        setProductStats({ name: activeProductFilter, qty: 0, revenue: 0 });
+      const totalQty = (matchItems || []).reduce((s: number, i: any) => s + i.quantity, 0);
+      const totalRev = (matchItems || []).reduce((s: number, i: any) => s + Number(i.line_total), 0);
+      const totalCogs = (matchItems || []).reduce((s: number, i: any) => s + (Number(i.cost_price || 0) * i.quantity), 0);
+      const totalProfit = totalRev - totalCogs;
+      productSaleIds = [...new Set((matchItems || []).map((i: any) => i.sale_id))];
+
+      // Fetch Purchases
+      let purchaseQuery = supabase
+        .from('purchase_items')
+        .select('quantity, line_total, purchases!inner(business_id, branch_id)')
+        .eq('product_id', selectedProduct.id)
+        .eq('purchases.business_id', business.id);
+      
+      if (isAdmin && selectedBranch !== 'all') purchaseQuery = purchaseQuery.eq('purchases.branch_id', selectedBranch);
+      else if (!isAdmin && currentBranch) purchaseQuery = purchaseQuery.eq('purchases.branch_id', currentBranch.id);
+
+      const { data: purchaseItems } = await purchaseQuery;
+      const totalPurchasedQty = (purchaseItems || []).reduce((sum, i) => sum + i.quantity, 0);
+      const totalPurchasedAmount = (purchaseItems || []).reduce((sum, i) => sum + Number(i.line_total), 0);
+
+      // Fetch Current Inventory
+      let invQuery = supabase
+        .from('inventory')
+        .select('quantity')
+        .eq('product_id', selectedProduct.id);
+      
+      if (isAdmin && selectedBranch !== 'all') invQuery = invQuery.eq('branch_id', selectedBranch);
+      else if (!isAdmin && currentBranch) invQuery = invQuery.eq('branch_id', currentBranch.id);
+
+      const { data: invData } = await invQuery;
+      const currentStock = (invData || []).reduce((sum, i) => sum + i.quantity, 0);
+
+      setProductStats({
+        name: selectedProduct.name,
+        soldQty: totalQty,
+        revenue: totalRev,
+        cogs: totalCogs,
+        profit: totalProfit,
+        purchasedQty: totalPurchasedQty,
+        purchasedAmount: totalPurchasedAmount,
+        currentStock,
+      });
+
+      if (!matchItems || matchItems.length === 0) {
         setSales([]);
         return;
       }
@@ -116,7 +168,7 @@ export default function SalesScreen() {
       .select(`
         id, total_amount, subtotal, tax_amount, discount_amount,
         payment_method, status, is_fiscalized, created_at,
-        customer_name, seller_id, branch_id,
+        customer_name, seller_id, branch_id, efris_status, efris_error,
         sale_items(id)
       `)
       .eq('business_id', business.id)
@@ -185,9 +237,27 @@ export default function SalesScreen() {
         branch_name: branchMap[s.branch_id] || '?',
         customer_name: s.customer_name || null,
         item_count: s.sale_items?.length || 0,
+        efris_status: s.efris_status || 'not_required',
+        efris_error: s.efris_error || null,
       })));
     }
-  }, [business, currentBranch, period, selectedBranch, selectedSeller, isAdmin, activeProductFilter]);
+  }, [business, currentBranch, period, selectedBranch, selectedSeller, isAdmin, selectedProduct]);
+
+  const searchProducts = async (query: string) => {
+    if (!business || !query.trim()) {
+      setProductSearchResults([]);
+      return;
+    }
+    setSearchingProducts(true);
+    const { data } = await supabase
+      .from('inventory')
+      .select('id, name, selling_price, stock_quantity')
+      .eq('business_id', business.id)
+      .ilike('name', `%${query}%`)
+      .limit(20);
+    setProductSearchResults(data || []);
+    setSearchingProducts(false);
+  };
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
@@ -314,39 +384,65 @@ export default function SalesScreen() {
             </View>
 
             {/* Product filter */}
-            <View style={styles.searchContainer}>
+            <TouchableOpacity
+              style={styles.searchContainer}
+              onPress={() => setShowProductModal(true)}
+            >
               <FontAwesome name="cube" size={14} color="#555" style={{ marginRight: 8 }} />
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Filter by product name..."
-                placeholderTextColor="#555"
-                value={productFilter}
-                onChangeText={setProductFilter}
-                onSubmitEditing={() => setActiveProductFilter(productFilter.trim())}
-                returnKeyType="search"
-              />
-              {activeProductFilter ? (
-                <TouchableOpacity onPress={() => { setProductFilter(''); setActiveProductFilter(''); }}>
+              <Text style={[styles.searchInput, !selectedProduct && { color: '#555' }]} numberOfLines={1}>
+                {selectedProduct ? selectedProduct.name : 'Select product to filter sales...'}
+              </Text>
+              {selectedProduct ? (
+                <TouchableOpacity onPress={() => setSelectedProduct(null)}>
                   <FontAwesome name="times-circle" size={16} color="#e94560" />
                 </TouchableOpacity>
-              ) : productFilter.trim() ? (
-                <TouchableOpacity onPress={() => setActiveProductFilter(productFilter.trim())}>
-                  <FontAwesome name="arrow-right" size={14} color="#e94560" />
-                </TouchableOpacity>
-              ) : null}
-            </View>
+              ) : (
+                <FontAwesome name="chevron-right" size={12} color="#555" />
+              )}
+            </TouchableOpacity>
 
-            {/* Product stats banner */}
+            {/* Product Performance Dashboard */}
             {productStats && (
-              <View style={styles.productBanner}>
-                <Text style={styles.productBannerTitle}>{productStats.qty > 0 ? '📦' : '🔍'} "{productStats.name}"</Text>
-                <View style={{ flexDirection: 'row', gap: 16, marginTop: 4, backgroundColor: 'transparent' }}>
-                  <Text style={styles.productBannerStat}>{productStats.qty} units sold</Text>
-                  <Text style={styles.productBannerStat}>{fmt(productStats.revenue)} revenue</Text>
+              <View style={styles.dashboardContainer}>
+                <View style={styles.dashboardHeader}>
+                  <Text style={styles.dashboardTitle}>📦 {productStats.name}</Text>
+                  <View style={[styles.stockBadge, { backgroundColor: productStats.currentStock > 0 ? '#2d6a4f' : '#e94560' }]}>
+                    <Text style={styles.stockBadgeText}>Stock: {productStats.currentStock}</Text>
+                  </View>
                 </View>
-                <Text style={{ color: '#6b7280', fontSize: 11, marginTop: 4 }}>
-                  Showing {filteredSales.length} receipt{filteredSales.length !== 1 ? 's' : ''} containing this product
-                </Text>
+
+                <View style={styles.dashboardGrid}>
+                  <View style={styles.dashboardItem}>
+                    <Text style={styles.dashboardLabel}>Sold Qty</Text>
+                    <Text style={styles.dashboardValue}>{productStats.soldQty}</Text>
+                  </View>
+                  <View style={styles.dashboardItem}>
+                    <Text style={[styles.dashboardLabel, { color: '#4ade80' }]}>Revenue</Text>
+                    <Text style={[styles.dashboardValue, { color: '#4ade80' }]}>{fmt(productStats.revenue)}</Text>
+                  </View>
+                  
+                  <View style={styles.dashboardItem}>
+                    <Text style={styles.dashboardLabel}>Purchased</Text>
+                    <Text style={styles.dashboardValue}>{productStats.purchasedQty}</Text>
+                  </View>
+                  <View style={styles.dashboardItem}>
+                    <Text style={[styles.dashboardLabel, { color: '#60a5fa' }]}>Cost</Text>
+                    <Text style={[styles.dashboardValue, { color: '#60a5fa' }]}>{fmt(productStats.purchasedAmount)}</Text>
+                  </View>
+
+                  <View style={[styles.dashboardItem, { borderBottomWidth: 0 }]}>
+                    <Text style={styles.dashboardLabel}>Profit</Text>
+                    <Text style={[styles.dashboardValue, { color: productStats.profit >= 0 ? '#4ade80' : '#f00' }]}>
+                      {fmt(productStats.profit)}
+                    </Text>
+                  </View>
+                  <View style={[styles.dashboardItem, { borderBottomWidth: 0 }]}>
+                    <Text style={styles.dashboardLabel}>Margin</Text>
+                    <Text style={[styles.dashboardValue, { color: '#aaa' }]}>
+                      {productStats.revenue > 0 ? ((productStats.profit / productStats.revenue) * 100).toFixed(1) : '0'}%
+                    </Text>
+                  </View>
+                </View>
               </View>
             )}
           </>
@@ -369,11 +465,28 @@ export default function SalesScreen() {
                 ]}>
                   <Text style={styles.statusText}>{item.status}</Text>
                 </View>
-                {item.is_fiscalized && (
+                {item.efris_status === 'submitted' && (
                   <Text style={styles.efrisBadge}>✅ EFRIS</Text>
+                )}
+                {item.efris_status === 'failed' && (
+                  <Text style={[styles.efrisBadge, { color: '#e94560' }]}>❌ EFRIS Failed</Text>
+                )}
+                {item.efris_status === 'not_required' && (
+                  <Text style={[styles.efrisBadge, { color: '#888' }]}>🛡️ Internal Only</Text>
                 )}
               </View>
             </View>
+
+            {/* Manual Fiscalize Button if enabled */}
+            {(item.efris_status !== 'submitted' && business?.is_efris_enabled) && (
+              <TouchableOpacity
+                style={styles.fiscalizeRowBtn}
+                onPress={() => router.push({ pathname: '/fiscalize-sale', params: { saleId: item.id } })}
+              >
+                <FontAwesome name="paper-plane-o" size={12} color="#e94560" />
+                <Text style={styles.fiscalizeRowText}>Modify & Submit to EFRIS</Text>
+              </TouchableOpacity>
+            )}
 
             <View style={styles.saleCardMeta}>
               <Text style={styles.metaText}>
@@ -413,6 +526,67 @@ export default function SalesScreen() {
           </View>
         }
       />
+
+      {/* Product Selection Modal */}
+      <Modal visible={showProductModal} animationType="slide" transparent>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Filter by Product</Text>
+                <TouchableOpacity onPress={() => setShowProductModal(false)}>
+                  <FontAwesome name="times" size={24} color="#fff" />
+                </TouchableOpacity>
+              </View>
+              
+              <View style={styles.modalSearchContainer}>
+                <FontAwesome name="search" size={16} color="#666" />
+                <TextInput
+                  style={styles.modalSearchInput}
+                  placeholder="Search products..."
+                  placeholderTextColor="#666"
+                  value={productSearchQuery}
+                  onChangeText={(t) => { setProductSearchQuery(t); searchProducts(t); }}
+                  autoFocus
+                />
+              </View>
+
+              <FlatList
+                data={productSearchResults}
+                keyExtractor={(item) => item.id}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={styles.productItem}
+                    onPress={() => {
+                      setSelectedProduct({ id: item.id, name: item.name });
+                      setShowProductModal(false);
+                      setProductSearchQuery('');
+                      setProductSearchResults([]);
+                    }}
+                  >
+                    <View style={{ flex: 1, backgroundColor: 'transparent' }}>
+                      <Text style={{ color: '#fff', fontSize: 16, fontWeight: 'bold' }}>{item.name}</Text>
+                      <Text style={{ color: '#aaa', fontSize: 12 }}>{fmt(item.selling_price)} • Stock: {item.stock_quantity}</Text>
+                    </View>
+                    <FontAwesome name="chevron-right" size={14} color="#333" />
+                  </TouchableOpacity>
+                )}
+                ListEmptyComponent={
+                  <View style={{ alignItems: 'center', paddingVertical: 40, backgroundColor: 'transparent' }}>
+                    {searchingProducts ? (
+                      <ActivityIndicator color="#e94560" />
+                    ) : (
+                      <Text style={{ color: '#555' }}>
+                        {productSearchQuery ? 'No products found' : 'Type to search products'}
+                      </Text>
+                    )}
+                  </View>
+                }
+              />
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
@@ -445,7 +619,9 @@ const styles = StyleSheet.create({
   badgeCompleted: { backgroundColor: '#2d6a4f' },
   badgeVoided: { backgroundColor: '#e94560' },
   statusText: { color: '#fff', fontSize: 11, fontWeight: 'bold', textTransform: 'capitalize' },
-  efrisBadge: { fontSize: 11, marginTop: 4 },
+  efrisBadge: { fontSize: 11, marginTop: 4, fontWeight: 'bold' },
+  fiscalizeRowBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, paddingVertical: 8, borderTopWidth: 1, borderTopColor: '#0f3460' },
+  fiscalizeRowText: { color: '#e94560', fontSize: 12, fontWeight: 'bold' },
   saleCardMeta: { marginTop: 8, backgroundColor: 'transparent' },
   metaText: { color: '#888', fontSize: 12, marginTop: 2 },
   saleCardExtras: { flexDirection: 'row', gap: 8, marginTop: 6, backgroundColor: 'transparent' },
@@ -459,4 +635,22 @@ const styles = StyleSheet.create({
   productBanner: { marginHorizontal: 16, marginBottom: 10, padding: 12, backgroundColor: '#1a3a2e', borderRadius: 10, borderWidth: 1, borderColor: '#2d6a4f' },
   productBannerTitle: { color: '#4ade80', fontWeight: 'bold', fontSize: 14 },
   productBannerStat: { color: '#a7f3d0', fontSize: 13 },
+  // Dashboard Styles
+  dashboardContainer: { marginHorizontal: 16, marginBottom: 12, backgroundColor: '#16213e', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#0f3460' },
+  dashboardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, backgroundColor: 'transparent' },
+  dashboardTitle: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+  stockBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
+  stockBadgeText: { color: '#fff', fontSize: 11, fontWeight: 'bold' },
+  dashboardGrid: { flexDirection: 'row', flexWrap: 'wrap', backgroundColor: 'transparent' },
+  dashboardItem: { width: '50%', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#0f3460' },
+  dashboardLabel: { color: '#888', fontSize: 11, marginBottom: 2 },
+  dashboardValue: { color: '#fff', fontSize: 14, fontWeight: 'bold' },
+  // Modal styles
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
+  modalContent: { backgroundColor: '#1a1a2e', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, maxHeight: '80%' },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, backgroundColor: 'transparent' },
+  modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#fff' },
+  modalSearchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#16213e', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, marginBottom: 16 },
+  modalSearchInput: { flex: 1, color: '#fff', fontSize: 16, marginLeft: 10 },
+  productItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#0f3460', backgroundColor: 'transparent' },
 });

@@ -76,7 +76,8 @@ const getGuideSections = (efris: boolean): GuideSection[] => [
           'Tap "Complete Setup" to finish. You\'ll be redirected to the main app.',
         ],
         tips: [
-          'You can change your business details later in Settings.',
+          'You can change your business details and logo later in Settings.',
+          'The default currency you set here will be used for all accounting reports.',
           'The 7-day free trial gives you full access to all features.',
         ],
       },
@@ -120,7 +121,7 @@ const getGuideSections = (efris: boolean): GuideSection[] => [
           'Tap a product to add it to your cart. Use + / − buttons to adjust quantity.',
           'To apply a per-item discount, tap the tag icon on a cart item and enter an amount or percentage.',
           'To edit the selling price, tap the pencil icon on a cart item.',
-          'Select the tax option for each item (No Tax, 18% VAT, Zero Rated, Exempt).',
+          ...(efris ? ['Select the tax option for each item (No Tax, 18% VAT, Zero Rated, Exempt).'] : []),
           'When your cart is ready, tap "Charge" at the bottom.',
           'Choose a payment method: Cash, Mobile Money, Card, Bank, or Credit.',
           'Optionally select a customer for the invoice.',
@@ -129,6 +130,7 @@ const getGuideSections = (efris: boolean): GuideSection[] => [
         ],
         tips: [
           'Use "Clear Cart" (trash icon) to start a fresh sale.',
+          'To sell in a different currency (e.g. USD for a tourist), tap the currency badge in the cart.',
           'Credit sales automatically create a debt entry for the customer.',
           ...(efris ? [
             'If EFRIS is enabled (Pro plan), the sale is automatically fiscalized with URA.',
@@ -141,15 +143,15 @@ const getGuideSections = (efris: boolean): GuideSection[] => [
         title: 'Receipts',
         route: '/receipt',
         description: efris
-          ? 'View, print, or share fiscalized receipts with QR codes and URA-compliant tax breakdowns.'
-          : 'View, print, or share receipts with tax breakdowns.',
+          ? 'View, print, or share fiscalized receipts with QR codes, business logo, and URA-compliant tax breakdowns.'
+          : 'View, print, or share receipts with your business logo.',
         steps: [
           'After completing a sale, the receipt screen opens automatically.',
           efris
-            ? 'The receipt shows: business name, invoice number, items, subtotal, tax breakdown by category (A–F), total, and EFRIS FDN.'
-            : 'The receipt shows: business name, invoice number, items, subtotal, tax breakdown, and total.',
-          'Tap "Share" to send the receipt as a PDF.',
-          'Tap "Print" to print the receipt (requires a connected printer).',
+            ? 'The receipt shows: logo, business name, invoice number, items, subtotal, tax breakdown by category (A–F), total, and EFRIS FDN.'
+            : 'The receipt shows: logo, business name, invoice number, items, and total.',
+          'Tap "Share" to send the receipt as a PDF (WhatsApp, Email, etc).',
+          'Tap "Print" to print the receipt (requires a connected thermal printer).',
           'Tap "Done" to return to the Sell screen.',
         ],
         tips: [
@@ -199,9 +201,7 @@ const getGuideSections = (efris: boolean): GuideSection[] => [
           ...(efris ? [
             'Choose the EFRIS tax category: Standard (18%), Zero Rated, Exempt, or Excise Duty.',
             'Set the EFRIS unit mapping for fiscal compliance.',
-          ] : [
-            'Choose the tax category: Standard (18%), Zero Rated, Exempt, or Excise Duty.',
-          ]),
+          ] : []),
           'Optionally upload a product image.',
           'Tap "Save" to create or update the product.',
           ...(efris ? ['For EFRIS-enabled businesses, tap "Register with EFRIS" to sync the product with URA.'] : []),
@@ -738,9 +738,17 @@ const getFaqs = (efris: boolean): { q: string; a: string }[] => [
     a: 'Go to Dashboard → Export. Choose from 8 data types (Sales, Expenses, Inventory, Customers, Purchases, Debts, VAT, Income Tax). Select a date range and tap Export. The CSV file can be shared via email, WhatsApp, or saved to your device.',
   },
   {
+    q: 'How do I sell in a different currency?',
+    a: 'Product prices are stored in your business currency. To sell in another currency, go to the cart and tap the "Currency" badge. You can select any other currency and the prices will be converted in real-time based on the current market rate.',
+  },
+  {
+    q: 'How do I manage my field sales team?',
+    a: 'Assign stock to users via Settings → Field Sales → Assign Stock. Users then record sales using their assigned inventory. You must approve these sales in Settings → Field Sales → Approve Sales before they are finalized.',
+  },
+  ...(efris ? [{
     q: 'What are the URA tax filing deadlines?',
     a: 'VAT: 15th of the following month. PAYE: 15th of the following month. Income Tax: Quarterly installments (Jun 30, Sep 30, Dec 31, Mar 31). Annual Return: June 30. Check the Tax Center for a deadline calendar.',
-  },
+  }] : []),
 ];
 
 /* ─── Component ─── */
@@ -920,13 +928,17 @@ export default function HelpScreen() {
               <Text style={styles.quickRefTitle}>Quick Reference</Text>
               <View style={styles.refRow}><Text style={styles.refLabel}>4 Main Tabs:</Text><Text style={styles.refValue}>Sell, Inventory, Dashboard, Settings</Text></View>
               <View style={styles.refRow}><Text style={styles.refLabel}>Payment Methods:</Text><Text style={styles.refValue}>Cash, Mobile Money, Card, Bank, Credit</Text></View>
-              <View style={styles.refRow}><Text style={styles.refLabel}>Tax Options:</Text><Text style={styles.refValue}>No Tax, 18% VAT, Zero Rated, Exempt</Text></View>
+              {efrisEnabled && (
+                <View style={styles.refRow}><Text style={styles.refLabel}>Tax Options:</Text><Text style={styles.refValue}>No Tax, 18% VAT, Zero Rated, Exempt</Text></View>
+              )}
               <View style={styles.refRow}><Text style={styles.refLabel}>User Roles:</Text><Text style={styles.refValue}>Admin, Branch Manager, Salesperson</Text></View>
               <View style={styles.refRow}><Text style={styles.refLabel}>Plans:</Text><Text style={styles.refValue}>Free Trial (14d), Starter (30K), Basic (70K), Pro (220K)</Text></View>
               {efrisEnabled && (
-                <View style={styles.refRow}><Text style={styles.refLabel}>Buyer Types:</Text><Text style={styles.refValue}>B2B, B2C, Foreigner, B2G</Text></View>
+                <>
+                  <View style={styles.refRow}><Text style={styles.refLabel}>Buyer Types:</Text><Text style={styles.refValue}>B2B, B2C, Foreigner, B2G</Text></View>
+                  <View style={styles.refRow}><Text style={styles.refLabel}>VAT Filing:</Text><Text style={styles.refValue}>15th of each month</Text></View>
+                </>
               )}
-              <View style={styles.refRow}><Text style={styles.refLabel}>VAT Filing:</Text><Text style={styles.refValue}>15th of each month</Text></View>
               <View style={styles.refRow}><Text style={styles.refLabel}>Cost Method:</Text><Text style={styles.refValue}>AVCO (Weighted Average Cost)</Text></View>
             </View>
           </>
