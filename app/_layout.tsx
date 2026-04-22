@@ -54,7 +54,7 @@ export default function RootLayout() {
 }
 
 function RootLayoutNav() {
-  const { session, user, loading, isInitializing, profile, business, subscriptionStatus, signOut, reloadUserData, changePassword } = useAuth();
+  const { session, user, loading, error, isInitializing, profile, business, subscriptionStatus, signOut, reloadUserData, changePassword } = useAuth();
   const segments = useSegments();
   const router = useRouter();
   const [showPasswordPrompt, setShowPasswordPrompt] = useState(false);
@@ -199,10 +199,25 @@ function RootLayoutNav() {
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#1a1a2e', paddingHorizontal: 32 }}>
         <View style={{ marginBottom: 40, alignItems: 'center' }}>
           <Text style={{ fontSize: 32, fontWeight: 'bold', color: '#e94560', marginBottom: 10 }}>📒 YourBooks</Text>
-          <ActivityIndicator size="large" color="#e94560" />
+          {!error && <ActivityIndicator size="large" color="#e94560" />}
         </View>
         
-        <Text style={{ color: '#fff', fontSize: 18, fontWeight: '600', textAlign: 'center' }}>{spinnerText}</Text>
+        {error ? (
+          <View style={{ alignItems: 'center' }}>
+            <Text style={{ color: '#ff4d4d', fontSize: 16, textAlign: 'center', marginBottom: 20 }}>{error}</Text>
+            <TouchableOpacity 
+              onPress={() => reloadUserData()}
+              style={{ backgroundColor: '#e94560', paddingVertical: 12, paddingHorizontal: 24, borderRadius: 8, marginBottom: 12 }}
+            >
+              <Text style={{ color: '#fff', fontWeight: 'bold' }}>Try Again</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => signOut()}>
+              <Text style={{ color: '#888', textDecorationLine: 'underline' }}>Sign Out</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <Text style={{ color: '#fff', fontSize: 18, fontWeight: '600', textAlign: 'center' }}>{spinnerText}</Text>
+        )}
       </View>
     );
   }

@@ -316,7 +316,7 @@ export default function LoginScreen() {
               style={styles.demoButton}
               onPress={async () => {
                 setLoading(true);
-                const { error } = await signIn('mudegiemma@gmail.com', 'mudegi@256');
+                const { error } = await signIn('kissakian@gmail.com', 'demo@123');
                 if (error) Alert.alert('Demo Login Failed', error.message);
                 setLoading(false);
               }}

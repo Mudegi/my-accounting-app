@@ -68,6 +68,7 @@ type AuthContextType = {
   branches: Branch[];
   currentBranch: Branch | null;
   loading: boolean;
+  error: string | null;
   isInitializing: boolean;
   currency: Currency;
   taxes: TaxRate[];
@@ -95,6 +96,7 @@ const AuthContext = createContext<AuthContextType>({
   currentBranch: null,
   taxes: [],
   loading: true,
+  error: null,
   isInitializing: false,
   currency: { code: 'UGX', name: 'Ugandan Shilling', symbol: 'UGX', decimal_places: 0 },
   fmt: (a: number) => `UGX ${Math.round(a).toLocaleString()}`,
@@ -123,6 +125,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [currentBranch, setCurrentBranch] = useState<Branch | null>(null);
   const [taxes, setTaxes] = useState<TaxRate[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [isInitializing, setIsInitializing] = useState(false);
   const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatus | null>(null);
   const initialLoadDone = React.useRef(false);
@@ -250,10 +253,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (!profileData) {
         console.error('No profile record found after retries for user:', userId);
+        setError('Profile not found. Please contact support or try logging in again.');
         setLoading(false); // Stop the spinner so UI can show retry
         return;
       }
 
+      setError(null);
       setProfile(profileData);
 
       // Load business
@@ -323,8 +328,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           is_default: t.is_default
         })));
       }
-    } catch (error: any) {
-      console.error('Error loading user data:', error);
+    } catch (err: any) {
+      console.error('Error loading user data:', err);
+      setError(err.message || 'Failed to load user data');
     } finally {
       setLoading(false);
     }
@@ -482,6 +488,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const hasFeature = (feature: string) => {
     if (isSuperAdmin) return true;
+    // EFRIS override: if explicitly enabled at business level, consider feature present
+    if (feature === 'efris' && business?.is_efris_enabled) return true;
+    
     if (!subscriptionStatus?.active) return false;
     return subscriptionStatus.features?.includes(feature) || false;
   };
@@ -497,6 +506,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         currentBranch,
         taxes,
         loading,
+        error,
         isInitializing,
         currency,
         fmt,
