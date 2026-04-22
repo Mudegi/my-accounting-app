@@ -145,7 +145,7 @@ export default function SalesScreen() {
   useEffect(() => {
     loadAllProducts();
     loadCurrencies().then(setAvailableCurrencies);
-  }, []);
+  }, [currentBranch?.id]);
 
   useEffect(() => {
     if (business?.default_currency) {
@@ -193,7 +193,7 @@ export default function SalesScreen() {
   const discountAmount = perItemDiscountTotal + globalDiscountAmount;
   const discountedNet = subtotalAmount - discountAmount;
   // Tax computed on each item's discounted net
-  const taxAmount = subtotalAmount > 0
+  const taxAmount = (subtotalAmount > 0 && efrisEnabled)
     ? cart.reduce((sum, item) => {
         const itemNet = item.price * item.quantity;
         const itemPerDiscount = getItemDiscountAmount(item);
@@ -284,10 +284,10 @@ export default function SalesScreen() {
 
     const lower = query.toLowerCase();
     
-    // 1. ALWAYS filter locally first for instant feedback
     const localMatches = allProducts.filter(p => 
-      p.name.toLowerCase().includes(lower) || 
-      (p.barcode && p.barcode.includes(query))
+      (p.is_service || p.stock_quantity > 0) &&
+      (p.name.toLowerCase().includes(lower) || 
+      (p.barcode && p.barcode.includes(query)))
     );
     setSearchResults(localMatches);
 

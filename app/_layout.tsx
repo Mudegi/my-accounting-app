@@ -57,7 +57,6 @@ function RootLayoutNav() {
   const { session, user, loading, isInitializing, profile, business, subscriptionStatus, signOut, reloadUserData, changePassword } = useAuth();
   const segments = useSegments();
   const router = useRouter();
-  const [loadingTooLong, setLoadingTooLong] = useState(false);
   const [showPasswordPrompt, setShowPasswordPrompt] = useState(false);
   const [newPwd, setNewPwd] = useState('');
   const [confirmPwd, setConfirmPwd] = useState('');
@@ -104,15 +103,25 @@ function RootLayoutNav() {
     };
   }, []);
 
-  // Show "check your internet" after 15s of loading
+  // Auto-retry sync in background if taking too long (>15s)
   useEffect(() => {
+    let timer: NodeJS.Timeout;
+    let interval: NodeJS.Timeout;
+
     if (showSpinner) {
-      setLoadingTooLong(false);
-      const timer = setTimeout(() => setLoadingTooLong(true), 15000);
-      return () => clearTimeout(timer);
-    } else {
-      setLoadingTooLong(false);
+      timer = setTimeout(() => {
+        // After 15s of spinning, start auto-retrying every 10s
+        interval = setInterval(() => {
+          console.log('[Sync] Background auto-retry...');
+          reloadUserData();
+        }, 10000);
+      }, 15000);
     }
+
+    return () => {
+      clearTimeout(timer);
+      clearInterval(interval);
+    };
   }, [showSpinner]);
 
   // Detect first login for invited users — prompt password change
@@ -194,21 +203,6 @@ function RootLayoutNav() {
         </View>
         
         <Text style={{ color: '#fff', fontSize: 18, fontWeight: '600', textAlign: 'center' }}>{spinnerText}</Text>
-
-        {loadingTooLong && (
-          <View style={{ marginTop: 40, alignItems: 'center', width: '100%' }}>
-            <Text style={{ color: '#e94560', fontSize: 13, fontWeight: 'bold', marginBottom: 8, letterSpacing: 1 }}>POOR CONNECTION</Text>
-            <Text style={{ color: '#aaa', fontSize: 13, textAlign: 'center', lineHeight: 20, marginBottom: 24 }}>
-              Syncing is taking longer than usual.{'\n'}Please check your internet connection.
-            </Text>
-            <TouchableOpacity
-              onPress={() => { setLoadingTooLong(false); reloadUserData(); }}
-              style={{ width: '100%', backgroundColor: '#e94560', borderRadius: 12, paddingVertical: 14, alignItems: 'center' }}
-            >
-              <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 15 }}>Retry Sync</Text>
-            </TouchableOpacity>
-          </View>
-        )}
       </View>
     );
   }

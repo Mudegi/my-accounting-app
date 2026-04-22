@@ -12,7 +12,10 @@ export function aggregateTrendData(sales: any[], period: string): TrendData[] {
   const map: Record<string, number> = {};
   
   sales.forEach(s => {
+    if (!s.created_at) return;
     const date = new Date(s.created_at);
+    if (isNaN(date.getTime())) return;
+    
     let key = '';
     
     if (period === 'today') {

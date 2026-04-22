@@ -102,7 +102,7 @@ export default function DashboardScreen() {
         // ── Admin: parallel fetch ──
         let salesQ = supabase
           .from('sales')
-          .select('branch_id, total_amount, sale_items(quantity, cost_price)')
+          .select('branch_id, total_amount, created_at, sale_items(quantity, cost_price)')
           .eq('business_id', business.id)
           .eq('status', 'completed')
           .gte('created_at', from);
@@ -224,6 +224,9 @@ export default function DashboardScreen() {
         setBranchSummaries([]);
         setBusinessTotal({ revenue: 0, cost: 0, profit: 0, expenses: 0, netProfit: 0, transactions: 0 });
         setRecentSales(recent || []);
+        
+        // Trend data for dashboard (7 days)
+        setTrendData(aggregateTrendData(salesData || [], 'week'));
       }
     } catch (e) {
       console.error('Dashboard load error:', e);
