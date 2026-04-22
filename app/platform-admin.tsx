@@ -142,6 +142,7 @@ export default function PlatformAdminScreen() {
   const [loadingLogs, setLoadingLogs] = useState(false);
 
   // Announcement
+  const [announcement, setAnnouncement] = useState('');
   const [savingAnnouncement, setSavingAnnouncement] = useState(false);
   const [signupTrend, setSignupTrend] = useState<{value: number, label: string}[]>([]);
   const [leaderboard, setLeaderboard] = useState<any[]>([]);
