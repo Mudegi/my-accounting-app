@@ -18,27 +18,11 @@ import { loadCurrencies, POPULAR_CURRENCIES, type Currency } from '@/lib/currenc
 import { getPlans, type SubscriptionPlan } from '@/lib/subscription';
 import { supabase } from '@/lib/supabase';
 import { formatCurrency } from '@/lib/currency';
+import SearchableModal from '@/components/SearchableModal';
+import { COUNTRIES, type Country } from '@/lib/countries';
 
 type Step = 'business' | 'currency' | 'plan';
 
-const COUNTRIES = [
-  { name: 'Uganda', currency: 'UGX' },
-  { name: 'Kenya', currency: 'KES' },
-  { name: 'Tanzania', currency: 'TZS' },
-  { name: 'Rwanda', currency: 'RWF' },
-  { name: 'Burundi', currency: 'BIF' },
-  { name: 'South Sudan', currency: 'SSP' },
-  { name: 'DR Congo', currency: 'CDF' },
-  { name: 'Nigeria', currency: 'NGN' },
-  { name: 'Ghana', currency: 'GHS' },
-  { name: 'South Africa', currency: 'ZAR' },
-  { name: 'Ethiopia', currency: 'ETB' },
-  { name: 'Somalia', currency: 'SOS' },
-  { name: 'United Kingdom', currency: 'GBP' },
-  { name: 'USA', currency: 'USD' },
-  { name: 'UAE', currency: 'AED' },
-  { name: 'Other', currency: 'USD' },
-];
 
 export default function OnboardingScreen() {
   const { business, refreshBusiness, refreshSubscription, reloadUserData } = useAuth();
@@ -61,6 +45,10 @@ export default function OnboardingScreen() {
   // Step 3: Plan
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
+
+  // Picker states
+  const [showCountryPicker, setShowCountryPicker] = useState(false);
+  const [showCurrencyPicker, setShowCurrencyPicker] = useState(false);
 
   useEffect(() => {
     loadCurrencies().then(setCurrencies);
@@ -189,22 +177,27 @@ export default function OnboardingScreen() {
             <Text style={styles.subtitle}>Tell us about your business baseline</Text>
 
             <Text style={styles.label}>Select Country *</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
-              <View style={styles.countryRow}>
-                {COUNTRIES.map((c) => (
-                  <TouchableOpacity
-                    key={c.name}
-                    style={[styles.countryChip, bizCountry === c.name && styles.countryChipActive]}
-                    onPress={() => {
-                      setBizCountry(c.name);
-                      setSelectedCurrency(c.currency);
-                    }}
-                  >
-                    <Text style={[styles.countryText, bizCountry === c.name && styles.countryTextActive]}>{c.name}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </ScrollView>
+            <TouchableOpacity 
+              style={styles.pickerTrigger} 
+              onPress={() => setShowCountryPicker(true)}
+            >
+              <Text style={styles.pickerTriggerText}>{bizCountry || 'Tap to select country'}</Text>
+              <FontAwesome name="search" size={14} color="#888" />
+            </TouchableOpacity>
+
+            <SearchableModal
+              visible={showCountryPicker}
+              onClose={() => setShowCountryPicker(false)}
+              title="Select Country"
+              data={COUNTRIES}
+              labelExtractor={(c: Country) => c.name}
+              valueExtractor={(c: Country) => c.name}
+              subLabelExtractor={(c: Country) => `Default: ${c.currency}`}
+              onSelect={(c: Country) => {
+                setBizCountry(c.name);
+                setSelectedCurrency(c.currency);
+              }}
+            />
 
             <Text style={styles.label}>Business Name *</Text>
             <TextInput style={styles.input} value={bizName} onChangeText={setBizName} placeholder="e.g. Kampala Hardware Store" placeholderTextColor="#555" />
@@ -234,38 +227,28 @@ export default function OnboardingScreen() {
             <Text style={styles.title}>Select Your Currency</Text>
             <Text style={styles.subtitle}>Choose the main currency for your business</Text>
 
-            <Text style={styles.sectionLabel}>Popular</Text>
-            <View style={styles.currencyGrid}>
-              {popularCurrencies.map((c) => (
-                <TouchableOpacity
-                  key={c.code}
-                  style={[styles.currencyCard, selectedCurrency === c.code && styles.currencyCardActive]}
-                  onPress={() => setSelectedCurrency(c.code)}
-                >
-                  <Text style={[styles.currencySymbol, selectedCurrency === c.code && styles.currencyTextActive]}>{c.symbol}</Text>
-                  <Text style={[styles.currencyCode, selectedCurrency === c.code && styles.currencyTextActive]}>{c.code}</Text>
-                  <Text style={styles.currencyName} numberOfLines={1}>{c.name}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+            <TouchableOpacity 
+              style={styles.pickerTrigger} 
+              onPress={() => setShowCurrencyPicker(true)}
+            >
+              <View style={{ backgroundColor: 'transparent' }}>
+                <Text style={styles.pickerTriggerText}>
+                  {selectedCurrency ? `${selectedCurrency} - ${currencies.find(c => c.code === selectedCurrency)?.name || ''}` : 'Tap to select currency'}
+                </Text>
+              </View>
+              <FontAwesome name="search" size={14} color="#888" />
+            </TouchableOpacity>
 
-            {otherCurrencies.length > 0 && (
-              <>
-                <Text style={styles.sectionLabel}>Other</Text>
-                <View style={styles.currencyGrid}>
-                  {otherCurrencies.map((c) => (
-                    <TouchableOpacity
-                      key={c.code}
-                      style={[styles.currencyCard, selectedCurrency === c.code && styles.currencyCardActive]}
-                      onPress={() => setSelectedCurrency(c.code)}
-                    >
-                      <Text style={[styles.currencySymbol, selectedCurrency === c.code && styles.currencyTextActive]}>{c.symbol}</Text>
-                      <Text style={[styles.currencyCode, selectedCurrency === c.code && styles.currencyTextActive]}>{c.code}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </>
-            )}
+            <SearchableModal
+              visible={showCurrencyPicker}
+              onClose={() => setShowCurrencyPicker(false)}
+              title="Select Currency"
+              data={currencies}
+              labelExtractor={(c: Currency) => `${c.code} - ${c.name}`}
+              valueExtractor={(c: Currency) => c.code}
+              subLabelExtractor={(c: Currency) => c.symbol}
+              onSelect={(c: Currency) => setSelectedCurrency(c.code)}
+            />
 
             <View style={styles.buttonRow}>
               <TouchableOpacity style={styles.backButton} onPress={() => setStep('business')}>
@@ -390,6 +373,22 @@ const styles = StyleSheet.create({
   label: { fontSize: 13, color: '#aaa', marginBottom: 6, marginTop: 12 },
   sectionLabel: { fontSize: 14, color: '#aaa', fontWeight: '600', marginTop: 16, marginBottom: 8 },
   input: { backgroundColor: '#16213e', borderRadius: 12, padding: 14, fontSize: 15, color: '#fff', borderWidth: 1, borderColor: '#0f3460' },
+  pickerTrigger: {
+    backgroundColor: '#16213e',
+    borderRadius: 12,
+    padding: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#0f3460',
+    marginTop: 8,
+    marginBottom: 16,
+  },
+  pickerTriggerText: {
+    color: '#fff',
+    fontSize: 16,
+  },
 
   primaryButton: { backgroundColor: '#e94560', borderRadius: 12, padding: 16, alignItems: 'center', marginTop: 24 },
   primaryButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },

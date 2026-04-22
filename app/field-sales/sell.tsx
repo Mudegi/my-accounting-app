@@ -635,7 +635,8 @@ export default function FieldSellScreen() {
       ) : (
         <FlatList
           data={assignments.filter(a => 
-            a.product_name?.toLowerCase().includes(stockSearch.toLowerCase())
+            a.product_name?.toLowerCase().includes(stockSearch.toLowerCase()) &&
+            getAvailableQty(a) > 0
           )}
           keyExtractor={a => a.id}
           renderItem={({ item }) => {

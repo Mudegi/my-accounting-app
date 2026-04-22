@@ -32,6 +32,7 @@ type SaleRow = {
   item_count: number;
   efris_status: string;
   efris_error: string | null;
+  is_field_sale?: boolean;
 };
 
 type Period = 'today' | 'week' | 'month' | '3months' | 'all';
@@ -51,6 +52,7 @@ export default function SalesScreen() {
   const [selectedBranch, setSelectedBranch] = useState<string>('all');
   const [selectedSeller, setSelectedSeller] = useState<string>('all');
   const [sellers, setSellers] = useState<{ id: string; name: string }[]>([]);
+  const [fieldOnly, setFieldOnly] = useState(false);
   
   // Product selection states
   const [selectedProduct, setSelectedProduct] = useState<{ id: string; name: string } | null>(null);
@@ -174,6 +176,7 @@ export default function SalesScreen() {
         id, total_amount, subtotal, tax_amount, discount_amount,
         payment_method, status, is_fiscalized, created_at,
         customer_name, seller_id, branch_id, efris_status, efris_error,
+        is_field_sale,
         sale_items(id)
       `)
       .eq('business_id', business.id)
@@ -200,6 +203,10 @@ export default function SalesScreen() {
     // Product filter: restrict to matching sales
     if (productSaleIds) {
       query = query.in('id', productSaleIds);
+    }
+
+    if (fieldOnly) {
+      query = query.eq('is_field_sale', true);
     }
 
     const { data } = await query;
@@ -244,6 +251,7 @@ export default function SalesScreen() {
         item_count: s.sale_items?.length || 0,
         efris_status: s.efris_status || 'not_required',
         efris_error: s.efris_error || null,
+        is_field_sale: s.is_field_sale,
       })));
     }
   }, [business, currentBranch, period, selectedBranch, selectedSeller, isAdmin, selectedProduct]);
@@ -347,6 +355,20 @@ export default function SalesScreen() {
                     <Text style={[styles.branchChipText, selectedBranch === b.id && styles.branchChipTextActive]}>{b.name}</Text>
                   </TouchableOpacity>
                 ))}
+              </View>
+            )}
+
+            {/* Field Sale Toggle */}
+            {isAdmin && (
+              <View style={[styles.branchFilter, { marginBottom: 12 }]}>
+                <TouchableOpacity
+                  style={[styles.branchChip, fieldOnly && { backgroundColor: '#FF9800', borderColor: '#FF9800' }]}
+                  onPress={() => setFieldOnly(!fieldOnly)}
+                >
+                  <Text style={[styles.branchChipText, fieldOnly && { color: '#fff' }]}>
+                    {fieldOnly ? '📍 Field Sales Only' : 'Show All Types'}
+                  </Text>
+                </TouchableOpacity>
               </View>
             )}
 
@@ -478,6 +500,9 @@ export default function SalesScreen() {
                 )}
                 {item.efris_status === 'not_required' && (
                   <Text style={[styles.efrisBadge, { color: '#888' }]}>🛡️ Internal Only</Text>
+                )}
+                {item.is_field_sale && (
+                  <Text style={[styles.efrisBadge, { color: '#FF9800' }]}>📍 Field Sale</Text>
                 )}
               </View>
             </View>

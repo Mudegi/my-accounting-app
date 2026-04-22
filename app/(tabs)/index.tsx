@@ -282,38 +282,53 @@ export default function SalesScreen() {
       return;
     }
 
-    // Client-side filter first for speed
-    if (query.length < 3 && allProducts.length > 0) {
-      const lower = query.toLowerCase();
-      setSearchResults(allProducts.filter(p => p.name.toLowerCase().includes(lower)));
-      return;
-    }
+    const lower = query.toLowerCase();
+    
+    // 1. ALWAYS filter locally first for instant feedback
+    const localMatches = allProducts.filter(p => 
+      p.name.toLowerCase().includes(lower) || 
+      (p.barcode && p.barcode.includes(query))
+    );
+    setSearchResults(localMatches);
 
-    const { data } = await supabase
-      .from('products')
-      .select(`
-        id, name, barcode, image_url, tax_category_code, is_service,
-        inventory!inner(selling_price, avg_cost_price, quantity)
-      `)
-      .eq('business_id', business.id)
-      .eq('inventory.branch_id', currentBranch?.id)
-      .ilike('name', `%${query}%`);
+    // 2. Only hit the network if we have few local matches AND query is long enough
+    // This allows finding items that might not have been in the initial "loadAll"
+    if (localMatches.length < 5 && query.length >= 3) {
+      const { data } = await supabase
+        .from('products')
+        .select(`
+          id, name, barcode, image_url, tax_category_code, is_service,
+          inventory!inner(selling_price, avg_cost_price, quantity)
+        `)
+        .eq('business_id', business.id)
+        .eq('inventory.branch_id', currentBranch?.id)
+        .ilike('name', `%${query}%`)
+        .limit(20);
 
-    if (data) {
-      const results: InventoryItem[] = data
-        .filter((p: any) => p.is_service || ((p.inventory[0]?.quantity || 0) > 0 && (p.inventory[0]?.avg_cost_price || 0) > 0))
-        .map((p: any) => ({
-          id: p.id,
-          name: p.name,
-          barcode: p.barcode,
-          image_url: p.image_url,
-          selling_price: p.inventory[0]?.selling_price || 0,
-          avg_cost_price: p.inventory[0]?.avg_cost_price || 0,
-          stock_quantity: p.inventory[0]?.quantity || 0,
-          tax_category_code: p.tax_category_code || '01',
-          is_service: p.is_service ?? false,
-        }));
-      setSearchResults(results);
+      if (data) {
+        const networkResults: InventoryItem[] = data
+          .filter((p: any) => p.is_service || ((p.inventory[0]?.quantity || 0) > 0 && (p.inventory[0]?.avg_cost_price || 0) > 0))
+          .map((p: any) => ({
+            id: p.id,
+            name: p.name,
+            barcode: p.barcode,
+            image_url: p.image_url,
+            selling_price: p.inventory[0]?.selling_price || 0,
+            avg_cost_price: p.inventory[0]?.avg_cost_price || 0,
+            stock_quantity: p.inventory[0]?.quantity || 0,
+            tax_category_code: p.tax_category_code || '01',
+            is_service: p.is_service ?? false,
+          }));
+        
+        // Merge with local results, avoiding duplicates
+        setSearchResults(prev => {
+          const combined = [...prev];
+          networkResults.forEach(nr => {
+            if (!combined.some(c => c.id === nr.id)) combined.push(nr);
+          });
+          return combined;
+        });
+      }
     }
   };
 
@@ -336,6 +351,13 @@ export default function SalesScreen() {
       const inv = (data as any).inventory[0];
       const cost = inv?.avg_cost_price || 0;
       const isService = (data as any).is_service ?? false;
+
+      // Enforcement: No stock = No sale (except services)
+      if (!isService && (inv?.quantity || 0) <= 0) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        Alert.alert('Out of Stock', 'This item doesnt have stock');
+        return;
+      }
 
       // Enforcement: No cost price = No sale (except services)
       if (!isService && cost <= 0) {
@@ -392,7 +414,7 @@ export default function SalesScreen() {
         );
       }
       if (!product.is_service && product.stock_quantity <= 0) {
-        Alert.alert('Out of Stock', `"${product.name}" is out of stock.`);
+        Alert.alert('Out of Stock', 'This item doesnt have stock');
         return prev;
       }
       if (!product.is_service && (product.avg_cost_price || 0) <= 0) {
@@ -672,33 +694,34 @@ export default function SalesScreen() {
 
       if (itemsError) throw itemsError;
 
-      // Decrement inventory and calculate true COGS using AVCO returned from DB
-      // Services don't have stock — skip decrement for them
+      // Batch decrement inventory for all physical goods in one request
+      const physicalItems = cart.filter(i => !i.is_service).map(i => ({
+        product_id: i.product_id,
+        quantity: i.quantity
+      }));
+
       let actualCOGS = 0;
-      let goodsRevenue = 0;
-      let serviceRevenue = 0;
+      let goodsRevenue = cart.filter(i => !i.is_service).reduce((sum, i) => sum + (i.price * i.quantity), 0);
+      let serviceRevenue = cart.filter(i => i.is_service).reduce((sum, i) => sum + (i.price * i.quantity), 0);
 
-      for (const item of cart) {
-        if (item.is_service) {
-          serviceRevenue += item.price * item.quantity;
-          continue;
-        }
-        
-        goodsRevenue += Number(item.price) * Number(item.quantity);
-
-        const { data: avcoValue, error: invError } = await supabase.rpc('decrement_inventory', {
+      if (physicalItems.length > 0) {
+        const { data: avcoResults, error: batchError } = await supabase.rpc('decrement_inventory_batch', {
           p_branch_id: currentBranch.id,
-          p_product_id: item.product_id,
-          p_quantity: Number(item.quantity),
+          p_items: physicalItems
         });
-        
-        if (invError) {
-          console.error(`Inventory decrement failed for ${item.name}:`, invError.message);
-          Alert.alert('System Match Error', `The sale was recorded, but stock for "${item.name}" did not reduce in the system. Ensure the database repair migration has been run.`);
-        }
 
-        // Accumulate COGS: retrieved AVCO * quantity sold
-        actualCOGS += (Number(avcoValue) || 0) * Number(item.quantity);
+        if (batchError) {
+          console.error('Batch inventory decrement failed:', batchError.message);
+          // Fallback warning but allow sale to proceed since sale record is already saved
+        } else if (avcoResults) {
+          // Map the returned AVCOs back to the items to calculate total COGS
+          avcoResults.forEach((res: any) => {
+            const item = cart.find(i => i.product_id === res.product_id);
+            if (item) {
+              actualCOGS += (Number(res.avco) || 0) * Number(item.quantity);
+            }
+          });
+        }
       }
 
       postSaleEntry({

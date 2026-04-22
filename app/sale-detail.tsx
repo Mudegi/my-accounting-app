@@ -271,8 +271,8 @@ export default function SaleDetailScreen() {
           <Text style={styles.actionText}>Print / Share Receipt</Text>
         </TouchableOpacity>
 
-        {/* Fiscalize Button for non-submitted sales */}
-        {sale.efris_status !== 'submitted' && business?.is_efris_enabled && (
+        {/* Fiscalize Button for non-submitted sales — only for admins/managers */}
+        {sale.efris_status !== 'submitted' && business?.is_efris_enabled && (profile?.role === 'admin' || profile?.role === 'branch_manager') && (
           <TouchableOpacity
             style={[styles.actionBtn, { backgroundColor: '#4CAF50', marginTop: 12 }]}
             onPress={() => router.push({ pathname: '/fiscalize-sale' as any, params: { saleId: sale.id } })}

@@ -287,7 +287,7 @@ export default function ReportsScreen() {
       <View style={styles.chartCard}>
         <Text style={styles.chartTitle}>Revenue Trend ({periodLabels[period]})</Text>
         <BarChart
-          data={trendData.map(d => ({ value: d.value, label: d.label }))}
+          data={trendData.map(d => ({ value: d.value, label: d.label, labelTextStyle: { color: '#ccc', fontSize: 10 } }))}
           barWidth={22}
           noOfSections={3}
           barBorderRadius={4}
@@ -297,6 +297,7 @@ export default function ReportsScreen() {
           hideRules
           topLabelTextStyle={{ color: '#aaa', fontSize: 10 }}
           yAxisTextStyle={{ color: '#aaa', fontSize: 10 }}
+          xAxisLabelTextStyle={{ color: '#ccc', fontSize: 10 }}
           isAnimated
         />
       </View>
@@ -718,8 +719,8 @@ export default function ReportsScreen() {
             <Text style={styles.chartTitle}>VAT Comparison</Text>
             <BarChart
               data={[
-                { value: vat.outputVat, label: 'Output', frontColor: '#e94560' },
-                { value: vat.inputVat, label: 'Input', frontColor: '#4CAF50' },
+                { value: vat.outputVat, label: 'Output', frontColor: '#e94560', labelTextStyle: { color: '#ccc' } },
+                { value: vat.inputVat, label: 'Input', frontColor: '#4CAF50', labelTextStyle: { color: '#ccc' } },
               ]}
               barWidth={60}
               spacing={40}
@@ -729,6 +730,7 @@ export default function ReportsScreen() {
               hideRules
               topLabelTextStyle={{ color: '#aaa', fontSize: 12 }}
               yAxisTextStyle={{ color: '#aaa', fontSize: 10 }}
+              xAxisLabelTextStyle={{ color: '#ccc' }}
             />
           </View>
         )}

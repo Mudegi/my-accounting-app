@@ -223,28 +223,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const MAX_RETRIES = 5;
 
       while (retries < MAX_RETRIES) {
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', userId)
-          .maybeSingle(); // Better than .single() because we expect it might be missing
-        
-        if (data) {
-          profileData = data;
-          break;
+        try {
+          // Use a promise race to timeout the supabase call if it hangs
+          const result = await Promise.race([
+            supabase.from('profiles').select('*').eq('id', userId).maybeSingle(),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 8000))
+          ]) as any;
+
+          const { data, error } = result;
+          
+          if (data) {
+            profileData = data;
+            break;
+          }
+          
+          if (error && error.code !== 'PGRST116') {
+            console.error('Profile query error:', error.message);
+          }
+        } catch (err: any) {
+          console.warn(`Profile load attempt ${retries + 1} timed out or failed.`);
         }
         
-        if (error && error.code !== 'PGRST116') { // PGRST116 is just "no rows found"
-          console.error('Profile query error:', error.message);
-        }
-        
-        console.log(`Waiting for profile... attempt ${retries + 1}`);
-        await new Promise(resolve => setTimeout(resolve, 800 * (retries + 1))); // Incremental backoff
+        await new Promise(resolve => setTimeout(resolve, 1000 * (retries + 1)));
         retries++;
       }
 
       if (!profileData) {
         console.error('No profile record found after retries for user:', userId);
+        setLoading(false); // Stop the spinner so UI can show retry
         return;
       }
 
@@ -263,19 +269,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (businessData) {
         setBusiness(businessData);
 
-        // Load currencies + check subscription in parallel
+        // Load currencies + check subscription in parallel with timeout
         try {
-          const [, subStatus] = await Promise.all([
-            loadCurrencies(),
-            checkSubscription(businessData.id),
+          await Promise.race([
+            Promise.all([
+              loadCurrencies(),
+              checkSubscription(businessData.id),
+              enforceDeviceLimit(businessData.id)
+            ]),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 10000))
           ]);
-          setSubscriptionStatus(subStatus);
         } catch (e) {
-          console.error('Currency/subscription load error:', e);
+          console.error('Business context load error or timeout:', e);
         }
-
-        // Enforce device limit
-        await enforceDeviceLimit(businessData.id);
       }
 
       // Load branches

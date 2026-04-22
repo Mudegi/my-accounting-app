@@ -22,6 +22,25 @@ import { statusLabel, statusColor, trialDaysRemaining } from '@/lib/subscription
 import { getBusinessSessions, removeOtherSession, getDeviceId, type DeviceSession } from '@/lib/device-sessions';
 import { loadCurrencies, type Currency } from '@/lib/currency';
 
+const SettingsSection = ({ title, icon, children, expanded, onToggle }: any) => (
+  <View style={styles.section}>
+    <TouchableOpacity style={styles.sectionHeader} onPress={onToggle}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: 'transparent' }}>
+        <View style={styles.iconContainer}>
+          <FontAwesome name={icon} size={16} color="#e94560" />
+        </View>
+        <Text style={styles.sectionTitle}>{title}</Text>
+      </View>
+      <FontAwesome name={expanded ? 'chevron-up' : 'chevron-down'} size={14} color="#666" />
+    </TouchableOpacity>
+    {expanded && (
+      <View style={styles.sectionContent}>
+        {children}
+      </View>
+    )}
+  </View>
+);
+
 export default function SettingsScreen() {
   const { profile, business, branches, currentBranch, setCurrentBranch, signOut, refreshBusiness, reloadUserData, subscriptionStatus, currency, isSuperAdmin, changePassword } = useAuth();
   const router = useRouter();
@@ -36,6 +55,7 @@ export default function SettingsScreen() {
   const [devices, setDevices] = useState<DeviceSession[]>([]);
   const [loadingDevices, setLoadingDevices] = useState(false);
   const [currentDeviceId, setCurrentDeviceId] = useState<string>('');
+  const [expandedSection, setExpandedSection] = useState<string | null>('profile'); // Default expand profile
 
   // Business Profile states
   const [isEditingProfile, setIsEditingProfile] = useState(false);
@@ -296,42 +316,50 @@ export default function SettingsScreen() {
 
       {/* Subscription & Currency — admin only */}
       {isAdmin && (
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Subscription & Billing</Text>
-        <TouchableOpacity style={styles.subscriptionCard} onPress={() => router.push('/subscription' as any)}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'transparent' }}>
-            <View style={{ backgroundColor: 'transparent', flex: 1 }}>
-              <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700' }}>
-                {subscriptionStatus?.display_name || subscriptionStatus?.plan || 'No Plan'}
-              </Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4, backgroundColor: 'transparent' }}>
-                <View style={{ backgroundColor: statusColor(business?.subscription_status || ''), paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 }}>
-                  <Text style={{ color: '#fff', fontSize: 11, fontWeight: '600' }}>{statusLabel(business?.subscription_status || '')}</Text>
+        <SettingsSection
+          title="Subscription & Billing"
+          icon="credit-card"
+          expanded={expandedSection === 'subscription'}
+          onToggle={() => setExpandedSection(expandedSection === 'subscription' ? null : 'subscription')}
+        >
+          <TouchableOpacity style={styles.subscriptionCard} onPress={() => router.push('/subscription' as any)}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'transparent' }}>
+              <View style={{ backgroundColor: 'transparent', flex: 1 }}>
+                <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700' }}>
+                  {subscriptionStatus?.display_name || subscriptionStatus?.plan || 'No Plan'}
+                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4, backgroundColor: 'transparent' }}>
+                  <View style={{ backgroundColor: statusColor(business?.subscription_status || ''), paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 }}>
+                    <Text style={{ color: '#fff', fontSize: 11, fontWeight: '600' }}>{statusLabel(business?.subscription_status || '')}</Text>
+                  </View>
+                  {business?.subscription_status === 'trial' && business?.subscription_ends_at && (
+                    <Text style={{ color: '#aaa', fontSize: 12 }}>
+                      {trialDaysRemaining(business.subscription_ends_at)} days left
+                    </Text>
+                  )}
                 </View>
-                {business?.subscription_status === 'trial' && business?.subscription_ends_at && (
-                  <Text style={{ color: '#aaa', fontSize: 12 }}>
-                    {trialDaysRemaining(business.subscription_ends_at)} days left
-                  </Text>
-                )}
               </View>
+              <FontAwesome name="chevron-right" size={16} color="#666" />
             </View>
-            <FontAwesome name="chevron-right" size={16} color="#666" />
+          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12, backgroundColor: 'transparent', borderTopWidth: 1, borderTopColor: '#333', marginTop: 12 }}>
+            <FontAwesome name="money" size={16} color="#4CAF50" style={{ marginRight: 10 }} />
+            <Text style={{ color: '#ccc', fontSize: 14 }}>Currency: <Text style={{ color: '#fff', fontWeight: '600' }}>{currency.symbol} ({currency.code})</Text></Text>
           </View>
-        </TouchableOpacity>
-        <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 8, backgroundColor: 'transparent' }}>
-          <FontAwesome name="money" size={16} color="#4CAF50" style={{ marginRight: 10 }} />
-          <Text style={{ color: '#ccc', fontSize: 14 }}>Currency: <Text style={{ color: '#fff', fontWeight: '600' }}>{currency.symbol} ({currency.code})</Text></Text>
-        </View>
-      </View>
+        </SettingsSection>
       )}
 
       {/* Business & Profile — admin only */}
       {isAdmin && (
-        <View style={styles.section}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, backgroundColor: 'transparent' }}>
-            <Text style={styles.sectionTitle}>Business & Profile</Text>
+        <SettingsSection
+          title="Business & Profile"
+          icon="building"
+          expanded={expandedSection === 'profile'}
+          onToggle={() => setExpandedSection(expandedSection === 'profile' ? null : 'profile')}
+        >
+          <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginBottom: 12, backgroundColor: 'transparent' }}>
             <TouchableOpacity onPress={() => setIsEditingProfile(!isEditingProfile)}>
-              <Text style={{ color: '#e94560', fontWeight: 'bold' }}>{isEditingProfile ? 'Cancel' : 'Edit'}</Text>
+              <Text style={{ color: '#e94560', fontWeight: 'bold' }}>{isEditingProfile ? 'Cancel' : 'Edit Profile'}</Text>
             </TouchableOpacity>
           </View>
 
@@ -507,13 +535,17 @@ export default function SettingsScreen() {
                />
             </View>
           )}
-        </View>
+        </SettingsSection>
       )}
 
       {/* Platform Admin — super admins only */}
       {isSuperAdmin && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Platform Administration</Text>
+        <SettingsSection
+          title="Platform Administration"
+          icon="shield"
+          expanded={expandedSection === 'platform'}
+          onToggle={() => setExpandedSection(expandedSection === 'platform' ? null : 'platform')}
+        >
           <TouchableOpacity style={styles.subscriptionCard} onPress={() => router.push('/platform-admin' as any)}>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'transparent' }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: 'transparent' }}>
@@ -526,12 +558,16 @@ export default function SettingsScreen() {
               <FontAwesome name="chevron-right" size={16} color="#666" />
             </View>
           </TouchableOpacity>
-        </View>
+        </SettingsSection>
       )}
 
-      {/* Current Branch — admins & managers can switch, salespersons see assigned branch only */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Current Branch</Text>
+      {/* Current Branch */}
+      <SettingsSection
+        title="Current Branch"
+        icon="map-marker"
+        expanded={expandedSection === 'branch'}
+        onToggle={() => setExpandedSection(expandedSection === 'branch' ? null : 'branch')}
+      >
         {isAdminOrManager ? (
           <>
             {branches.map((branch) => (
@@ -581,17 +617,19 @@ export default function SettingsScreen() {
             </View>
           </View>
         )}
-      </View>
+      </SettingsSection>
 
-      {/* Printing */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Printing</Text>
+      {/* App & Printing */}
+      <SettingsSection
+        title="App & Printing"
+        icon="cog"
+        expanded={expandedSection === 'app'}
+        onToggle={() => setExpandedSection(expandedSection === 'app' ? null : 'app')}
+      >
         <View style={styles.settingRow}>
           <View style={styles.settingInfo}>
             <Text style={styles.settingLabel}>Auto-Print Receipts</Text>
-            <Text style={styles.settingSubLabel}>
-              Automatically open print dialog after every sale
-            </Text>
+            <Text style={styles.settingSubLabel}>Automatically open print dialog after sale</Text>
           </View>
           <Switch
             value={autoPrint}
@@ -600,22 +638,12 @@ export default function SettingsScreen() {
             thumbColor={autoPrint ? '#fff' : '#666'}
           />
         </View>
-      </View>
 
-      {/* App Mode (Admin Only) */}
-      {isAdmin && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>App Mode</Text>
-          <View style={styles.settingRow}>
+        {isAdmin && (
+          <View style={[styles.settingRow, { marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderTopColor: '#333' }]}>
             <View style={styles.settingInfo}>
-              <Text style={styles.settingLabel}>
-                {proMode ? '🎓 Pro Mode' : '🟢 Basic Mode'}
-              </Text>
-              <Text style={styles.settingSubLabel}>
-                {proMode
-                  ? 'Full accounting: GL, P&L, Trial Balance'
-                  : 'Simple POS: Scan, Sell, Track'}
-              </Text>
+              <Text style={styles.settingLabel}>{proMode ? '🎓 Pro Mode' : '🟢 Basic Mode'}</Text>
+              <Text style={styles.settingSubLabel}>{proMode ? 'Full accounting enabled' : 'Simple POS mode'}</Text>
             </View>
             <Switch
               value={proMode}
@@ -624,13 +652,17 @@ export default function SettingsScreen() {
               thumbColor={proMode ? '#fff' : '#666'}
             />
           </View>
-        </View>
-      )}
+        )}
+      </SettingsSection>
 
-      {/* Admin Panel Links */}
+      {/* Admin Panel */}
       {isAdmin && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Admin Panel</Text>
+        <SettingsSection
+          title="Admin Panel"
+          icon="cogs"
+          expanded={expandedSection === 'admin'}
+          onToggle={() => setExpandedSection(expandedSection === 'admin' ? null : 'admin')}
+        >
           <TouchableOpacity style={styles.menuRow} onPress={() => router.push('/admin/users')}>
             <FontAwesome name="users" size={18} color="#aaa" />
             <Text style={styles.menuLabel}>Manage Users & Roles</Text>
@@ -653,53 +685,61 @@ export default function SettingsScreen() {
               <FontAwesome name="chevron-right" size={14} color="#555" />
             </TouchableOpacity>
           )}
-        </View>
+        </SettingsSection>
       )}
 
       {/* Field Sales */}
       {showFieldSales && (
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Field Sales</Text>
-        {isAdmin && (
-          <>
-            <TouchableOpacity style={styles.menuRow} onPress={() => router.push('/field-sales/assign-stock' as any)}>
-              <FontAwesome name="cubes" size={18} color="#FF9800" />
-              <Text style={styles.menuLabel}>Assign Stock to Users</Text>
-              <FontAwesome name="chevron-right" size={14} color="#555" />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.menuRow} onPress={() => router.push('/field-sales/approve-sales' as any)}>
-              <FontAwesome name="check-circle" size={18} color="#4CAF50" />
-              <Text style={styles.menuLabel}>Approve Field Sales</Text>
-              <FontAwesome name="chevron-right" size={14} color="#555" />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.menuRow} onPress={() => router.push('/field-sales/reconciliation' as any)}>
-              <FontAwesome name="pie-chart" size={18} color="#7C3AED" />
-              <Text style={styles.menuLabel}>Stock Reconciliation</Text>
-              <FontAwesome name="chevron-right" size={14} color="#555" />
-            </TouchableOpacity>
-          </>
-        )}
-        <TouchableOpacity style={styles.menuRow} onPress={() => router.push('/field-sales/my-stock' as any)}>
-          <FontAwesome name="archive" size={18} color="#2196F3" />
-          <Text style={styles.menuLabel}>My Assigned Stock</Text>
-          <FontAwesome name="chevron-right" size={14} color="#555" />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.menuRow} onPress={() => router.push('/field-sales/sell' as any)}>
-          <FontAwesome name="map-marker" size={18} color="#e94560" />
-          <Text style={styles.menuLabel}>Field Sale</Text>
-          <FontAwesome name="chevron-right" size={14} color="#555" />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.menuRow} onPress={() => router.push('/field-sales/field-customers' as any)}>
-          <FontAwesome name="address-book" size={18} color="#FF9800" />
-          <Text style={styles.menuLabel}>Field Customers</Text>
-          <FontAwesome name="chevron-right" size={14} color="#555" />
-        </TouchableOpacity>
-      </View>
+        <SettingsSection
+          title="Field Sales"
+          icon="truck"
+          expanded={expandedSection === 'fieldSales'}
+          onToggle={() => setExpandedSection(expandedSection === 'fieldSales' ? null : 'fieldSales')}
+        >
+          {isAdmin && (
+            <>
+              <TouchableOpacity style={styles.menuRow} onPress={() => router.push('/field-sales/assign-stock' as any)}>
+                <FontAwesome name="cubes" size={18} color="#FF9800" />
+                <Text style={styles.menuLabel}>Assign Stock to Users</Text>
+                <FontAwesome name="chevron-right" size={14} color="#555" />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.menuRow} onPress={() => router.push('/field-sales/approve-sales' as any)}>
+                <FontAwesome name="check-circle" size={18} color="#4CAF50" />
+                <Text style={styles.menuLabel}>Approve Field Sales</Text>
+                <FontAwesome name="chevron-right" size={14} color="#555" />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.menuRow} onPress={() => router.push('/field-sales/reconciliation' as any)}>
+                <FontAwesome name="pie-chart" size={18} color="#7C3AED" />
+                <Text style={styles.menuLabel}>Stock Reconciliation</Text>
+                <FontAwesome name="chevron-right" size={14} color="#555" />
+              </TouchableOpacity>
+            </>
+          )}
+          <TouchableOpacity style={styles.menuRow} onPress={() => router.push('/field-sales/my-stock' as any)}>
+            <FontAwesome name="archive" size={18} color="#2196F3" />
+            <Text style={styles.menuLabel}>My Assigned Stock</Text>
+            <FontAwesome name="chevron-right" size={14} color="#555" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.menuRow} onPress={() => router.push('/field-sales/sell' as any)}>
+            <FontAwesome name="map-marker" size={18} color="#e94560" />
+            <Text style={styles.menuLabel}>Field Sale</Text>
+            <FontAwesome name="chevron-right" size={14} color="#555" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.menuRow} onPress={() => router.push('/field-sales/field-customers' as any)}>
+            <FontAwesome name="address-book" size={18} color="#FF9800" />
+            <Text style={styles.menuLabel}>Field Customers</Text>
+            <FontAwesome name="chevron-right" size={14} color="#555" />
+          </TouchableOpacity>
+        </SettingsSection>
       )}
 
       {/* More Options */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>More</Text>
+      <SettingsSection
+        title="Modules & History"
+        icon="th-large"
+        expanded={expandedSection === 'more'}
+        onToggle={() => setExpandedSection(expandedSection === 'more' ? null : 'more')}
+      >
         {!isFieldOnly && (
           <TouchableOpacity style={styles.menuRow} onPress={() => router.push('/suppliers' as any)}>
             <FontAwesome name="truck" size={18} color="#aaa" />
@@ -747,137 +787,138 @@ export default function SettingsScreen() {
             <FontAwesome name="chevron-right" size={14} color="#555" />
           </TouchableOpacity>
         )}
-      </View>
+      </SettingsSection>
 
-      {/* Help & Guide */}
-      <TouchableOpacity
-        style={[styles.signOutButton, { borderColor: '#4CAF5033', marginBottom: 10 }]}
-        onPress={() => router.push('/help' as any)}
+      {/* Security & Support */}
+      <SettingsSection
+        title="Security & Support"
+        icon="lock"
+        expanded={expandedSection === 'security'}
+        onToggle={() => setExpandedSection(expandedSection === 'security' ? null : 'security')}
       >
-        <FontAwesome name="book" size={18} color="#4CAF50" />
-        <Text style={[styles.signOutText, { color: '#4CAF50' }]}>Help & User Guide</Text>
-      </TouchableOpacity>
+        <TouchableOpacity style={styles.menuRow} onPress={() => router.push('/help' as any)}>
+          <FontAwesome name="book" size={18} color="#4CAF50" />
+          <Text style={styles.menuLabel}>Help & User Guide</Text>
+          <FontAwesome name="chevron-right" size={14} color="#555" />
+        </TouchableOpacity>
 
-      {/* Change Password */}
-      <TouchableOpacity
-        style={[styles.signOutButton, { borderColor: '#2196F333', marginBottom: 10 }]}
-        onPress={() => setShowChangePassword(!showChangePassword)}
-      >
-        <FontAwesome name="lock" size={18} color="#2196F3" />
-        <Text style={[styles.signOutText, { color: '#2196F3' }]}>Change Password</Text>
-      </TouchableOpacity>
+        <TouchableOpacity style={styles.menuRow} onPress={() => setShowChangePassword(!showChangePassword)}>
+          <FontAwesome name="key" size={18} color="#2196F3" />
+          <Text style={styles.menuLabel}>Change Password</Text>
+          <FontAwesome name={showChangePassword ? 'chevron-up' : 'chevron-down'} size={14} color="#555" />
+        </TouchableOpacity>
 
-      {showChangePassword && (
-        <View style={styles.changePasswordCard}>
-          <TextInput
-            style={styles.fieldInput}
-            placeholder="New Password (min 6 chars)"
-            placeholderTextColor="#555"
-            value={newPassword}
-            onChangeText={setNewPassword}
-            secureTextEntry={!showPassword}
-          />
-          <TextInput
-            style={[styles.fieldInput, { marginTop: 10 }]}
-            placeholder="Confirm New Password"
-            placeholderTextColor="#555"
-            value={confirmPassword}
-            onChangeText={setConfirmPassword}
-            secureTextEntry={!showPassword}
-          />
-          <TouchableOpacity
-            style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10 }}
-            onPress={() => setShowPassword(!showPassword)}
-          >
-            <FontAwesome name={showPassword ? 'check-square-o' : 'square-o'} size={18} color="#888" />
-            <Text style={{ color: '#888', fontSize: 13 }}>Show passwords</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.efrisSaveBtn, { marginTop: 12, backgroundColor: '#2196F3' }]}
-            onPress={handleChangePassword}
-            disabled={changingPassword}
-          >
-            {changingPassword ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.efrisSaveText}>Update Password</Text>
-            )}
-          </TouchableOpacity>
-        </View>
-      )}
+        {showChangePassword && (
+          <View style={styles.changePasswordCard}>
+            <TextInput
+              style={styles.fieldInput}
+              placeholder="New Password (min 6 chars)"
+              placeholderTextColor="#555"
+              value={newPassword}
+              onChangeText={setNewPassword}
+              secureTextEntry={!showPassword}
+            />
+            <TextInput
+              style={[styles.fieldInput, { marginTop: 10 }]}
+              placeholder="Confirm New Password"
+              placeholderTextColor="#555"
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+              secureTextEntry={!showPassword}
+            />
+            <TouchableOpacity
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12 }}
+              onPress={() => setShowPassword(!showPassword)}
+            >
+              <FontAwesome name={showPassword ? 'check-square-o' : 'square-o'} size={18} color="#888" />
+              <Text style={{ color: '#888', fontSize: 13 }}>Show passwords</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.efrisSaveBtn, { marginTop: 16, backgroundColor: '#2196F3' }]}
+              onPress={handleChangePassword}
+              disabled={changingPassword}
+            >
+              {changingPassword ? <ActivityIndicator color="#fff" /> : <Text style={styles.efrisSaveText}>Update Password</Text>}
+            </TouchableOpacity>
+          </View>
+        )}
 
-      {/* Active Devices */}
-      {isAdmin && (
-        <>
-          <TouchableOpacity
-            style={[styles.signOutButton, { borderColor: '#FF980033', marginBottom: 10 }]}
-            onPress={handleToggleDevices}
-          >
-            <FontAwesome name="mobile-phone" size={22} color="#FF9800" />
-            <Text style={[styles.signOutText, { color: '#FF9800' }]}>Active Devices</Text>
-            <FontAwesome name={showDevices ? 'chevron-up' : 'chevron-down'} size={12} color="#FF9800" style={{ marginLeft: 'auto' }} />
-          </TouchableOpacity>
+        {isAdmin && (
+          <>
+            <TouchableOpacity style={[styles.menuRow, { marginTop: 8 }]} onPress={handleToggleDevices}>
+              <FontAwesome name="mobile-phone" size={22} color="#FF9800" />
+              <Text style={styles.menuLabel}>Manage Active Devices</Text>
+              <FontAwesome name={showDevices ? 'chevron-up' : 'chevron-down'} size={14} color="#555" />
+            </TouchableOpacity>
 
-          {showDevices && (
-            <View style={styles.changePasswordCard}>
-              {loadingDevices ? (
-                <ActivityIndicator color="#e94560" />
-              ) : devices.length === 0 ? (
-                <Text style={{ color: '#888', textAlign: 'center', fontSize: 13 }}>No active sessions found</Text>
-              ) : (
-                <>
-                  <Text style={{ color: '#aaa', fontSize: 12, marginBottom: 10 }}>
-                    {devices.length} active device{devices.length !== 1 ? 's' : ''}
-                  </Text>
-                  {devices.map((d) => {
-                    const isCurrent = d.device_id === currentDeviceId;
-                    const ago = Math.round((Date.now() - new Date(d.last_active_at).getTime()) / 60000);
-                    const agoLabel = ago < 1 ? 'Just now' : ago < 60 ? `${ago}m ago` : `${Math.round(ago / 60)}h ago`;
-                    return (
-                      <View key={d.id} style={{
-                        backgroundColor: '#0f3460',
-                        borderRadius: 10,
-                        padding: 12,
-                        marginBottom: 8,
-                        borderLeftWidth: isCurrent ? 3 : 0,
-                        borderLeftColor: '#4CAF50',
-                      }}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'transparent' }}>
-                          <View style={{ flex: 1, backgroundColor: 'transparent' }}>
-                            <Text style={{ color: '#fff', fontWeight: '600', fontSize: 14 }}>
-                              <FontAwesome name={d.platform === 'ios' ? 'apple' : d.platform === 'android' ? 'android' : 'globe'} size={14} color="#aaa" />
-                              {'  '}{d.device_name}{isCurrent ? ' (This device)' : ''}
-                            </Text>
-                            <Text style={{ color: '#aaa', fontSize: 12, marginTop: 2 }}>
-                              {d.user_name} · {agoLabel}
-                            </Text>
+            {showDevices && (
+              <View style={styles.changePasswordCard}>
+                {loadingDevices ? (
+                  <ActivityIndicator color="#e94560" />
+                ) : devices.length === 0 ? (
+                  <Text style={{ color: '#888', textAlign: 'center', fontSize: 13 }}>No other active devices</Text>
+                ) : (
+                  <>
+                    {devices.map((d) => {
+                      const isCurrent = d.device_id === currentDeviceId;
+                      const ago = Math.round((Date.now() - new Date(d.last_active_at).getTime()) / 60000);
+                      const agoLabel = ago < 1 ? 'Just now' : ago < 60 ? `${ago}m ago` : `${Math.round(ago / 60)}h ago`;
+                      return (
+                        <View key={d.id} style={{ backgroundColor: '#0f3460', borderRadius: 10, padding: 12, marginBottom: 8, borderLeftWidth: isCurrent ? 3 : 0, borderLeftColor: '#4CAF50' }}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'transparent' }}>
+                            <View style={{ flex: 1, backgroundColor: 'transparent' }}>
+                              <Text style={{ color: '#fff', fontWeight: '600', fontSize: 14 }}>
+                                <FontAwesome name={d.platform === 'ios' ? 'apple' : d.platform === 'android' ? 'android' : 'globe'} size={14} color="#aaa" />
+                                {'  '}{d.device_name}{isCurrent ? ' (This device)' : ''}
+                              </Text>
+                              <Text style={{ color: '#aaa', fontSize: 12, marginTop: 2 }}>{d.user_name} · {agoLabel}</Text>
+                            </View>
+                            {!isCurrent && isAdmin && (
+                              <TouchableOpacity onPress={() => handleRemoveDevice(d)} style={{ backgroundColor: '#8B1A1A', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6 }}>
+                                <Text style={{ color: '#fff', fontSize: 11, fontWeight: '600' }}>Log Out</Text>
+                              </TouchableOpacity>
+                            )}
                           </View>
-                          {!isCurrent && isAdmin && (
-                            <TouchableOpacity
-                              onPress={() => handleRemoveDevice(d)}
-                              style={{ backgroundColor: '#8B1A1A', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6 }}
-                            >
-                              <Text style={{ color: '#fff', fontSize: 11, fontWeight: '600' }}>Log Out</Text>
-                            </TouchableOpacity>
-                          )}
                         </View>
-                      </View>
-                    );
-                  })}
-                  <TouchableOpacity onPress={loadDevices} style={{ alignSelf: 'center', marginTop: 4 }}>
-                    <Text style={{ color: '#FF9800', fontSize: 12 }}>Refresh</Text>
-                  </TouchableOpacity>
-                </>
-              )}
+                      );
+                    })}
+                    <TouchableOpacity onPress={loadDevices} style={{ alignSelf: 'center', marginTop: 4 }}>
+                      <Text style={{ color: '#FF9800', fontSize: 12 }}>Refresh</Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+              </View>
+            )}
+          </>
+        )}
+      </SettingsSection>
+
+      {/* Platform Admin — Super Admin only */}
+      {isSuperAdmin && (
+        <SettingsSection
+          title="Platform Administration"
+          icon="shield"
+          expanded={expandedSection === 'platform'}
+          onToggle={() => setExpandedSection(expandedSection === 'platform' ? null : 'platform')}
+        >
+          <TouchableOpacity 
+            style={[styles.actionRow, { backgroundColor: '#16213e', borderRadius: 12, padding: 16 }]} 
+            onPress={() => router.push('/platform-admin')}
+          >
+            <FontAwesome name="dashboard" size={18} color="#e94560" style={{ marginRight: 12 }} />
+            <View style={{ backgroundColor: 'transparent', flex: 1 }}>
+              <Text style={{ color: '#fff', fontSize: 16, fontWeight: 'bold' }}>Platform Management</Text>
+              <Text style={{ color: '#aaa', fontSize: 12 }}>View logs, businesses & global stats</Text>
             </View>
-          )}
-        </>
+            <FontAwesome name="chevron-right" size={16} color="#666" />
+          </TouchableOpacity>
+        </SettingsSection>
       )}
 
       {/* Sign Out */}
       <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
         <FontAwesome name="sign-out" size={18} color="#e94560" />
-        <Text style={styles.signOutText}>Sign Out</Text>
+        <Text style={styles.signOutText}>Sign Out Account</Text>
       </TouchableOpacity>
 
       <View style={{ height: 40 }} />
@@ -952,16 +993,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   profileName: { fontSize: 20, fontWeight: 'bold', color: '#fff' },
-  profileRole: { fontSize: 12, color: '#e94560', fontWeight: 'bold', marginTop: 2 },
-  businessName: { fontSize: 13, color: '#aaa', marginTop: 4 },
-  section: {
-    backgroundColor: '#16213e',
-    marginHorizontal: 16,
-    marginBottom: 14,
-    borderRadius: 16,
-    padding: 16,
-  },
-  formSectionTitle: { fontSize: 16, color: '#fff', fontWeight: 'bold' },
   inputGroup: { marginTop: 8, backgroundColor: 'transparent' },
   inputLabel: { color: '#aaa', fontSize: 12, marginBottom: 4 },
   input: { backgroundColor: '#0f3460', borderRadius: 10, padding: 12, color: '#fff', fontSize: 14 },
@@ -997,6 +1028,36 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   settingInfo: { flex: 1, backgroundColor: 'transparent' },
+  profileRole: { fontSize: 12, color: '#e94560', fontWeight: 'bold', marginTop: 2 },
+  businessName: { fontSize: 13, color: '#aaa', marginTop: 4 },
+  section: {
+    backgroundColor: '#16213e',
+    marginHorizontal: 16,
+    marginBottom: 12,
+    borderRadius: 20,
+    overflow: 'hidden',
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    backgroundColor: 'transparent',
+  },
+  sectionTitle: { fontSize: 16, fontWeight: '700', color: '#fff' },
+  sectionContent: {
+    padding: 16,
+    paddingTop: 0,
+    backgroundColor: 'transparent',
+  },
+  iconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: '#e9456015',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   settingLabel: { fontSize: 15, color: '#fff', fontWeight: 'bold' },
   settingSubLabel: { fontSize: 12, color: '#aaa', marginTop: 3 },
   menuRow: {

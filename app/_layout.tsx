@@ -5,11 +5,12 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useState } from 'react';
 import 'react-native-reanimated';
-import { ActivityIndicator, TouchableOpacity, Modal, TextInput, StyleSheet, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import { ActivityIndicator, TouchableOpacity, Modal, TextInput, StyleSheet, Alert, KeyboardAvoidingView, Platform, AppState, type AppStateStatus } from 'react-native';
 import { View, Text } from '@/components/Themed';
 
 import { AuthProvider, useAuth } from '@/lib/auth';
 import { SubscriptionBanner } from '@/components/SubscriptionBanner';
+import * as Network from 'expo-network';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -62,10 +63,46 @@ function RootLayoutNav() {
   const [confirmPwd, setConfirmPwd] = useState('');
   const [changingPwd, setChangingPwd] = useState(false);
   const [showPwd, setShowPwd] = useState(false);
+  const appState = useRef(AppState.currentState);
+  const lastConnected = useRef<boolean | null>(null);
 
   // Show loading while auth is initializing OR while session exists but profile isn't ready yet
   const isSyncing = session && !profile;
   const showSpinner = loading || isInitializing || isSyncing;
+
+  // Monitor network connectivity and AppState for background/foreground refresh
+  useEffect(() => {
+    const handleAppStateChange = async (nextState: AppStateStatus) => {
+      if (nextState === 'active' && appState.current.match(/inactive|background/)) {
+        console.log('[App] Foregrounded, checking connection...');
+        const state = await Network.getNetworkStateAsync();
+        if (state.isConnected && state.isInternetReachable) {
+          reloadUserData();
+        }
+      }
+      appState.current = nextState;
+    };
+
+    const checkConnectivity = async () => {
+      const state = await Network.getNetworkStateAsync();
+      const isOnline = !!(state.isConnected && state.isInternetReachable);
+      
+      // If we transition from offline to online, refresh
+      if (lastConnected.current === false && isOnline === true) {
+        console.log('[Network] Back online! Auto-refreshing...');
+        reloadUserData();
+      }
+      lastConnected.current = isOnline;
+    };
+
+    const appStateSub = AppState.addEventListener('change', handleAppStateChange);
+    const connInterval = setInterval(checkConnectivity, 10000);
+
+    return () => {
+      appStateSub.remove();
+      clearInterval(connInterval);
+    };
+  }, []);
 
   // Show "check your internet" after 15s of loading
   useEffect(() => {
@@ -138,6 +175,17 @@ function RootLayoutNav() {
 
 
   if (showSpinner) {
+    const inOnboarding = segments[0] === 'onboarding';
+    let spinnerText = "Syncing your data...";
+    
+    if (isInitializing) {
+      spinnerText = "Signing in...";
+    } else if (inOnboarding) {
+      spinnerText = "Hold on, we're setting up your account...";
+    } else if (segments[0] === 'login') {
+      spinnerText = "Signing in...";
+    }
+
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#1a1a2e', paddingHorizontal: 32 }}>
         <View style={{ marginBottom: 40, alignItems: 'center' }}>
@@ -145,19 +193,19 @@ function RootLayoutNav() {
           <ActivityIndicator size="large" color="#e94560" />
         </View>
         
-        <Text style={{ color: '#fff', fontSize: 18, fontWeight: '600', textAlign: 'center' }}>Hold on, we're setting up your account...</Text>
+        <Text style={{ color: '#fff', fontSize: 18, fontWeight: '600', textAlign: 'center' }}>{spinnerText}</Text>
 
         {loadingTooLong && (
           <View style={{ marginTop: 40, alignItems: 'center', width: '100%' }}>
             <Text style={{ color: '#e94560', fontSize: 13, fontWeight: 'bold', marginBottom: 8, letterSpacing: 1 }}>POOR CONNECTION</Text>
             <Text style={{ color: '#aaa', fontSize: 13, textAlign: 'center', lineHeight: 20, marginBottom: 24 }}>
-              Setup is taking longer than usual.{'\n'}Please ensure you have a stable internet connection.
+              Syncing is taking longer than usual.{'\n'}Please check your internet connection.
             </Text>
             <TouchableOpacity
               onPress={() => { setLoadingTooLong(false); reloadUserData(); }}
               style={{ width: '100%', backgroundColor: '#e94560', borderRadius: 12, paddingVertical: 14, alignItems: 'center' }}
             >
-              <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 15 }}>Retry Setup</Text>
+              <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 15 }}>Retry Sync</Text>
             </TouchableOpacity>
           </View>
         )}

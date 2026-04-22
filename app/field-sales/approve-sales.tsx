@@ -35,6 +35,8 @@ export default function ApproveSalesScreen() {
   const [loading, setLoading] = useState(true);
   const [selectedSale, setSelectedSale] = useState<PendingFieldSale | null>(null);
   const [processing, setProcessing] = useState(false);
+  const [officers, setOfficers] = useState<{ id: string; full_name: string }[]>([]);
+  const [selectedOfficerId, setSelectedOfficerId] = useState<string>('all');
 
   // EFRIS fiscalization state
   const [showEfrisModal, setShowEfrisModal] = useState(false);
@@ -51,10 +53,18 @@ export default function ApproveSalesScreen() {
   };
 
   const load = useCallback(async () => {
-    if (!business) return;
     setLoading(true);
     const data = await getPendingFieldSales(business.id);
     setSales(data);
+    
+    // Also load officers for the filter
+    const { data: officersData } = await supabase
+      .from('profiles')
+      .select('id, full_name')
+      .eq('business_id', business.id)
+      .eq('sales_type', 'field');
+    setOfficers(officersData || []);
+    
     setLoading(false);
   }, [business]);
 
@@ -267,9 +277,37 @@ export default function ApproveSalesScreen() {
   };
 
   const totalPending = sales.reduce((s, sale) => s + sale.total_amount, 0);
+  const filteredSales = selectedOfficerId === 'all'
+    ? sales
+    : sales.filter(s => s.seller_id === selectedOfficerId);
 
   return (
     <View style={styles.container}>
+      {/* Officer Filter */}
+      {officers.length > 0 && (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll}>
+          <TouchableOpacity
+            style={[styles.filterChip, selectedOfficerId === 'all' && styles.filterChipActive]}
+            onPress={() => setSelectedOfficerId('all')}
+          >
+            <Text style={[styles.filterChipText, selectedOfficerId === 'all' && styles.filterChipTextActive]}>
+              All Officers
+            </Text>
+          </TouchableOpacity>
+          {officers.map(off => (
+            <TouchableOpacity
+              key={off.id}
+              style={[styles.filterChip, selectedOfficerId === off.id && styles.filterChipActive]}
+              onPress={() => setSelectedOfficerId(off.id)}
+            >
+              <Text style={[styles.filterChipText, selectedOfficerId === off.id && styles.filterChipTextActive]}>
+                {off.full_name}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      )}
+
       {/* Summary */}
       <View style={styles.summaryBar}>
         <View style={{ backgroundColor: 'transparent' }}>
@@ -285,7 +323,7 @@ export default function ApproveSalesScreen() {
         <ActivityIndicator color="#e94560" style={{ marginTop: 40 }} />
       ) : (
         <FlatList
-          data={sales}
+          data={filteredSales}
           keyExtractor={s => s.id}
           renderItem={({ item }) => (
             <View style={styles.card}>
@@ -421,7 +459,9 @@ export default function ApproveSalesScreen() {
             <View style={styles.empty}>
               <FontAwesome name="check-circle" size={48} color="#2d6a4f" />
               <Text style={styles.emptyText}>All caught up!</Text>
-              <Text style={styles.emptyHint}>No field sales pending approval</Text>
+              <Text style={styles.emptyHint}>
+                {selectedOfficerId === 'all' ? 'No field sales pending approval' : 'No sales pending for this officer'}
+              </Text>
             </View>
           }
         />
@@ -652,6 +692,13 @@ const styles = StyleSheet.create({
   summaryBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#16213e', borderRadius: 14, padding: 16, marginBottom: 14 },
   summaryCount: { color: '#FF9800', fontSize: 18, fontWeight: 'bold' },
   summaryTotal: { color: '#aaa', fontSize: 13, marginTop: 2 },
+
+  // Filters
+  filterScroll: { flexGrow: 0, marginBottom: 12, backgroundColor: 'transparent' },
+  filterChip: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: '#16213e', marginRight: 8, borderWidth: 1, borderColor: '#0f3460' },
+  filterChipActive: { backgroundColor: '#FF9800', borderColor: '#FF9800' },
+  filterChipText: { color: '#aaa', fontSize: 13, fontWeight: '600' },
+  filterChipTextActive: { color: '#fff' },
 
   // Card
   card: { backgroundColor: '#16213e', borderRadius: 14, padding: 14, marginBottom: 12 },

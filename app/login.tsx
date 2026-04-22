@@ -14,6 +14,10 @@ import { Text, View } from '@/components/Themed';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useAuth } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
+import SearchableModal from '@/components/SearchableModal';
+import { COUNTRIES, type Country } from '@/lib/countries';
+import { loadCurrencies, type Currency } from '@/lib/currency';
+import { useEffect } from 'react';
 
 export default function LoginScreen() {
   const { signIn, signUp } = useAuth();
@@ -35,6 +39,17 @@ export default function LoginScreen() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [resetLoading, setResetLoading] = useState(false);
+
+  // Pickers
+  const [showCountryPicker, setShowCountryPicker] = useState(false);
+  const [showCurrencyPicker, setShowCurrencyPicker] = useState(false);
+  const [currencies, setCurrencies] = useState<Currency[]>([]);
+
+  useEffect(() => {
+    if (isSignUp) {
+      loadCurrencies().then(setCurrencies);
+    }
+  }, [isSignUp]);
 
   const handleSignIn = async () => {
     if (!email || !password) {
@@ -181,40 +196,50 @@ export default function LoginScreen() {
 
               <View style={styles.pickerContainer}>
                 <Text style={styles.pickerLabel}>Base Country</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll}>
-                  {['Uganda', 'Kenya', 'Tanzania', 'Rwanda', 'Burundi', 'South Sudan', 'Nigeria', 'Other'].map((c) => (
-                    <TouchableOpacity
-                      key={c}
-                      style={[styles.chip, selectedCountry === c && styles.chipSelected]}
-                      onPress={() => {
-                        setSelectedCountry(c);
-                        const fallback = {
-                          'Uganda': 'UGX', 'Kenya': 'KES', 'Tanzania': 'TZS', 'Rwanda': 'RWF', 
-                          'Burundi': 'BIF', 'South Sudan': 'SSP', 'Nigeria': 'NGN'
-                        }[c];
-                        if (fallback) setSelectedCurrency(fallback);
-                      }}
-                    >
-                      <Text style={[styles.chipText, selectedCountry === c && styles.chipTextSelected]}>{c}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
+                <TouchableOpacity 
+                  style={styles.pickerTrigger} 
+                  onPress={() => setShowCountryPicker(true)}
+                >
+                  <Text style={styles.pickerTriggerText}>{selectedCountry}</Text>
+                  <FontAwesome name="search" size={14} color="#888" />
+                </TouchableOpacity>
               </View>
 
               <View style={styles.pickerContainer}>
                 <Text style={styles.pickerLabel}>Base Currency</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll}>
-                  {['UGX', 'KES', 'TZS', 'RWF', 'USD', 'EUR', 'GBP', 'NGN'].map((curr) => (
-                    <TouchableOpacity
-                      key={curr}
-                      style={[styles.chip, selectedCurrency === curr && styles.chipSelected]}
-                      onPress={() => setSelectedCurrency(curr)}
-                    >
-                      <Text style={[styles.chipText, selectedCurrency === curr && styles.chipTextSelected]}>{curr}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
+                <TouchableOpacity 
+                  style={styles.pickerTrigger} 
+                  onPress={() => setShowCurrencyPicker(true)}
+                >
+                  <Text style={styles.pickerTriggerText}>{selectedCurrency}</Text>
+                  <FontAwesome name="search" size={14} color="#888" />
+                </TouchableOpacity>
               </View>
+
+              <SearchableModal
+                visible={showCountryPicker}
+                onClose={() => setShowCountryPicker(false)}
+                title="Select Country"
+                data={COUNTRIES}
+                labelExtractor={(c: Country) => c.name}
+                valueExtractor={(c: Country) => c.name}
+                subLabelExtractor={(c: Country) => `Default: ${c.currency}`}
+                onSelect={(c: Country) => {
+                  setSelectedCountry(c.name);
+                  setSelectedCurrency(c.currency);
+                }}
+              />
+
+              <SearchableModal
+                visible={showCurrencyPicker}
+                onClose={() => setShowCurrencyPicker(false)}
+                title="Select Currency"
+                data={currencies}
+                labelExtractor={(c: Currency) => `${c.code} - ${c.name}`}
+                valueExtractor={(c: Currency) => c.code}
+                subLabelExtractor={(c: Currency) => c.symbol}
+                onSelect={(c: Currency) => setSelectedCurrency(c.code)}
+              />
             </>
           )}
 
@@ -434,6 +459,26 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderWidth: 1,
     borderColor: '#0f3460',
+  },
+  pickerTrigger: {
+    backgroundColor: '#16213e',
+    borderRadius: 12,
+    padding: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#0f3460',
+    marginBottom: 16,
+  },
+  pickerTriggerText: {
+    color: '#fff',
+    fontSize: 16,
+  },
+  pickerLabel: {
+    fontSize: 14,
+    color: '#888',
+    marginBottom: 8,
   },
   button: {
     backgroundColor: '#e94560',

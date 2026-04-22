@@ -20,6 +20,7 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { testEfrisConnection } from '@/lib/efris';
 import { getPlatformContacts, updatePlatformSetting, invalidatePlatformContacts } from '@/lib/platform-settings';
+import { BarChart } from 'react-native-gifted-charts';
 
 type PlatformStats = {
   total_businesses: number;
@@ -79,7 +80,7 @@ const PLAN_LABELS: Record<string, string> = {
 export default function PlatformAdminScreen() {
   const { isSuperAdmin, fmt } = useAuth();
   const router = useRouter();
-  const [tab, setTab] = useState<'dashboard' | 'businesses' | 'payments'>('dashboard');
+  const [tab, setTab] = useState<'dashboard' | 'businesses' | 'payments' | 'logs'>('dashboard');
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -136,6 +137,17 @@ export default function PlatformAdminScreen() {
   const [disableReason, setDisableReason] = useState('');
   const [disabling, setDisabling] = useState(false);
 
+  // Activity logs
+  const [logs, setLogs] = useState<any[]>([]);
+  const [loadingLogs, setLoadingLogs] = useState(false);
+
+  // Announcement
+  const [savingAnnouncement, setSavingAnnouncement] = useState(false);
+  const [signupTrend, setSignupTrend] = useState<{value: number, label: string}[]>([]);
+  const [leaderboard, setLeaderboard] = useState<any[]>([]);
+  const [leaderboardPeriod, setLeaderboardPeriod] = useState<'today' | 'week' | 'month'>('week');
+  const [loadingLeaderboard, setLoadingLeaderboard] = useState(false);
+
   // Guard
   if (!isSuperAdmin) {
     return (
@@ -158,6 +170,18 @@ export default function PlatformAdminScreen() {
       setContactPhone(contacts.contact_phone);
       setContactWhatsapp(contacts.contact_whatsapp);
       setContactEmail(contacts.contact_email);
+      setAnnouncement((contacts as any).platform_announcement || '');
+
+      // Load signup trend
+      const { data: trend } = await supabase.rpc('admin_platform_signup_trend', { p_days: 14 });
+      if (trend) {
+        setSignupTrend((trend as any[]).map(t => ({
+          value: Number(t.count),
+          label: new Date(t.day).getDate().toString()
+        })));
+      }
+
+      await loadLeaderboard();
     } catch (e: any) {
       Alert.alert('Error', e.message);
     }
@@ -183,18 +207,55 @@ export default function PlatformAdminScreen() {
     }
   };
 
+  const loadLogs = async () => {
+    try {
+      setLoadingLogs(true);
+      const { data, error } = await supabase.rpc('admin_list_activity_logs', { p_limit: 100 });
+      if (error) throw error;
+      setLogs(data || []);
+    } catch (e: any) {
+      console.error('Failed to load logs:', e);
+    } finally {
+      setLoadingLogs(false);
+    }
+  };
+
+  const loadLeaderboard = async (p?: 'today' | 'week' | 'month') => {
+    try {
+      const activePeriod = p || leaderboardPeriod;
+      setLoadingLeaderboard(true);
+      const { data, error } = await supabase.rpc('admin_platform_business_leaderboard', { p_period: activePeriod });
+      if (error) throw error;
+      setLeaderboard(data || []);
+    } catch (e) {
+      console.error('Leaderboard error:', e);
+    } finally {
+      setLoadingLeaderboard(false);
+    }
+  };
+
+  const handleSaveAnnouncement = async () => {
+    setSavingAnnouncement(true);
+    const success = await updatePlatformSetting('platform_announcement', announcement);
+    setSavingAnnouncement(false);
+    if (success) {
+      Alert.alert('Success', 'Platform announcement updated.');
+    }
+  };
+
   const refresh = async () => {
     setRefreshing(true);
     if (tab === 'dashboard') await loadDashboard();
     else if (tab === 'businesses') await loadBusinesses();
-    else await loadPayments();
+    else if (tab === 'payments') await loadPayments();
+    else if (tab === 'logs') await loadLogs();
     setRefreshing(false);
   };
 
   useFocusEffect(
     useCallback(() => {
       setLoading(true);
-      Promise.all([loadDashboard(), loadBusinesses(), loadPayments()]).finally(() => setLoading(false));
+      Promise.all([loadDashboard(), loadBusinesses(), loadPayments(), loadLogs()]).finally(() => setLoading(false));
     }, [])
   );
 
@@ -430,14 +491,14 @@ export default function PlatformAdminScreen() {
     <View style={styles.container}>
       {/* Tab Bar */}
       <View style={styles.tabBar}>
-        {(['dashboard', 'businesses', 'payments'] as const).map((t) => (
+        {(['dashboard', 'businesses', 'payments', 'logs'] as const).map((t) => (
           <TouchableOpacity
             key={t}
             style={[styles.tabBtn, tab === t && styles.tabBtnActive]}
             onPress={() => setTab(t)}
           >
             <FontAwesome
-              name={t === 'dashboard' ? 'tachometer' : t === 'businesses' ? 'building' : 'credit-card'}
+              name={t === 'dashboard' ? 'tachometer' : t === 'businesses' ? 'building' : t === 'payments' ? 'credit-card' : 'history'}
               size={14}
               color={tab === t ? '#e94560' : '#888'}
             />
@@ -491,6 +552,72 @@ export default function PlatformAdminScreen() {
             </View>
           </View>
 
+          {/* Signup Trend Chart */}
+          {signupTrend.length > 0 && (
+            <View style={{ backgroundColor: '#16213e', margin: 16, borderRadius: 20, padding: 16, borderWidth: 1, borderColor: '#0f3460' }}>
+              <Text style={{ color: '#fff', fontSize: 16, fontWeight: 'bold', marginBottom: 16 }}>📈 New Signups (14 Days)</Text>
+              <BarChart
+                data={signupTrend}
+                barWidth={14}
+                spacing={8}
+                noOfSections={3}
+                barBorderRadius={4}
+                frontColor="#e94560"
+                yAxisThickness={0}
+                xAxisThickness={0}
+                hideRules
+                yAxisTextStyle={{ color: '#555', fontSize: 10 }}
+                xAxisLabelTextStyle={{ color: '#888', fontSize: 10 }}
+                isAnimated
+              />
+            </View>
+          )}
+
+          {/* Leaderboard Section */}
+          <View style={{ marginTop: 16, backgroundColor: 'transparent' }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, marginBottom: 12, backgroundColor: 'transparent' }}>
+              <Text style={styles.sectionTitle}>🏆 Activity Leaderboard</Text>
+              <View style={{ flexDirection: 'row', gap: 4, backgroundColor: 'transparent' }}>
+                {(['today', 'week', 'month'] as const).map(p => (
+                  <TouchableOpacity
+                    key={p}
+                    onPress={() => { setLeaderboardPeriod(p); loadLeaderboard(p); }}
+                    style={{
+                      paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12,
+                      backgroundColor: leaderboardPeriod === p ? '#e94560' : '#16213e',
+                      borderWidth: 1, borderColor: '#0f3460'
+                    }}
+                  >
+                    <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>{p.toUpperCase()}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            {loadingLeaderboard ? (
+              <ActivityIndicator color="#e94560" style={{ marginVertical: 20 }} />
+            ) : leaderboard.length === 0 ? (
+              <Text style={{ color: '#555', textAlign: 'center', marginVertical: 20 }}>No activity data found</Text>
+            ) : (
+              <View style={{ paddingHorizontal: 16, backgroundColor: 'transparent' }}>
+                {leaderboard.map((item, index) => (
+                  <View key={item.business_id} style={styles.leaderboardRow}>
+                    <View style={styles.rankBadge}>
+                      <Text style={styles.rankText}>{index + 1}</Text>
+                    </View>
+                    <View style={{ flex: 1, backgroundColor: 'transparent' }}>
+                      <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700' }}>{item.business_name}</Text>
+                      <Text style={{ color: '#888', fontSize: 11 }}>
+                        {item.transaction_count} transactions · Last active: {item.last_activity ? new Date(item.last_activity).toLocaleDateString() : 'Never'}
+                      </Text>
+                    </View>
+                    <Text style={{ color: '#4CAF50', fontWeight: 'bold', fontSize: 14 }}>{fmt(item.total_revenue)}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+
           {/* Contact Info Settings */}
           <Text style={[styles.sectionTitle, { marginTop: 16 }]}>📞 Contact Info</Text>
           <Text style={{ color: '#888', fontSize: 12, marginBottom: 10 }}>Shown to businesses on subscription &amp; help screens</Text>
@@ -542,6 +669,31 @@ export default function PlatformAdminScreen() {
                 <ActivityIndicator color="#fff" size="small" />
               ) : (
                 <Text style={{ color: '#fff', fontWeight: '700' }}>💾 Save Contacts</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+
+          {/* Platform Announcement */}
+          <Text style={[styles.sectionTitle, { marginTop: 16 }]}>📢 Global Announcement</Text>
+          <Text style={{ color: '#888', fontSize: 12, marginBottom: 10 }}>This message will appear on every business dashboard.</Text>
+          <View style={{ backgroundColor: '#16213e', borderRadius: 12, padding: 14, marginBottom: 30 }}>
+            <TextInput
+              style={[styles.modalInput, { height: 80, textAlignVertical: 'top' }]}
+              placeholder="Enter message (e.g. Scheduled maintenance at 11 PM...)"
+              placeholderTextColor="#555"
+              value={announcement}
+              onChangeText={setAnnouncement}
+              multiline
+            />
+            <TouchableOpacity
+              style={[styles.modalConfirm, { marginTop: 4, backgroundColor: '#e94560' }]}
+              onPress={handleSaveAnnouncement}
+              disabled={savingAnnouncement}
+            >
+              {savingAnnouncement ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <Text style={{ color: '#fff', fontWeight: '700' }}>🚀 Update Announcement</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -704,7 +856,7 @@ export default function PlatformAdminScreen() {
             }
           />
         </View>
-      ) : (
+      ) : tab === 'payments' ? (
         // ──────── PAYMENTS TAB ────────
         <FlatList
           data={payments}
@@ -739,6 +891,42 @@ export default function PlatformAdminScreen() {
           ListEmptyComponent={
             <View style={styles.center}>
               <Text style={{ color: '#888' }}>No payments yet</Text>
+            </View>
+          }
+        />
+      ) : (
+        // ──────── LOGS TAB ────────
+        <FlatList
+          data={logs}
+          keyExtractor={(l, index) => index.toString()}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor="#e94560" />}
+          renderItem={({ item }) => (
+            <View style={styles.logCard}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: 'transparent' }}>
+                <View style={[styles.logIcon, { backgroundColor: item.action_type === 'SALE' ? '#4CAF50' : item.action_type === 'PAYMENT' ? '#2196F3' : '#e94560' }]}>
+                   <FontAwesome name={item.action_type === 'SALE' ? 'shopping-cart' : item.action_type === 'PAYMENT' ? 'credit-card' : 'user-plus'} size={12} color="#fff" />
+                </View>
+                <View style={{ flex: 1, backgroundColor: 'transparent' }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', backgroundColor: 'transparent' }}>
+                    <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700' }}>{item.business_name}</Text>
+                    <Text style={{ color: '#888', fontSize: 11 }}>{new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
+                  </View>
+                  <Text style={{ color: '#ccc', fontSize: 13, marginTop: 2 }}>{item.details}</Text>
+                  {Number(item.amount) > 0 && (
+                    <Text style={{ color: '#4CAF50', fontSize: 12, fontWeight: 'bold', marginTop: 2 }}>UGX {Number(item.amount).toLocaleString()}</Text>
+                  )}
+                </View>
+              </View>
+            </View>
+          )}
+          ListHeaderComponent={
+            <View style={{ padding: 12, backgroundColor: 'transparent' }}>
+               <Text style={{ color: '#888', fontSize: 12 }}>Showing latest 100 activities across all businesses</Text>
+            </View>
+          }
+          ListEmptyComponent={
+            <View style={styles.center}>
+              <Text style={{ color: '#888' }}>No activity logs yet</Text>
             </View>
           }
         />
@@ -1131,6 +1319,13 @@ const styles = StyleSheet.create({
   bizActions: { flexDirection: 'row', gap: 8, marginTop: 10, backgroundColor: 'transparent' },
   actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 },
   actionBtnText: { color: '#fff', fontSize: 11, fontWeight: '600' },
+
+  // Logs
+  logCard: { backgroundColor: '#16213e', borderRadius: 12, padding: 14, marginHorizontal: 12, marginBottom: 8, borderWidth: 1, borderColor: '#0f3460' },
+  logIcon: { width: 24, height: 24, borderRadius: 6, justifyContent: 'center', alignItems: 'center' },
+
+  // Payments
+  payCard: { backgroundColor: '#16213e', borderRadius: 12, padding: 14, marginHorizontal: 12, marginBottom: 8, borderWidth: 1, borderColor: '#0f3460' },
   miniStat: { color: '#666', fontSize: 11, fontWeight: 'bold', backgroundColor: '#0f3460', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
   miniStatWarn: { color: '#fff', backgroundColor: '#8B1A1A' },
 
@@ -1154,4 +1349,24 @@ const styles = StyleSheet.create({
   modalButtons: { flexDirection: 'row', gap: 10, marginTop: 16, backgroundColor: 'transparent' },
   modalCancel: { flex: 1, backgroundColor: '#333', borderRadius: 10, padding: 14, alignItems: 'center' },
   modalConfirm: { flex: 1, backgroundColor: '#2d6a4f', borderRadius: 10, padding: 14, alignItems: 'center' },
+  leaderboardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#16213e',
+    marginBottom: 8,
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#0f3460',
+    gap: 12,
+  },
+  rankBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#0f3460',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  rankText: { color: '#e94560', fontWeight: 'bold', fontSize: 13 },
 });

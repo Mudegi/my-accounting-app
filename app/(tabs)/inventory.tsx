@@ -19,6 +19,7 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import MyStockScreen from '../field-sales/my-stock';
 import { exportData, importData } from '@/lib/import-export';
 import { fetchEfrisGoods, type EfrisConfig } from '@/lib/efris';
+import { PieChart } from 'react-native-gifted-charts';
 
 type InventoryItem = {
   id: string;
@@ -290,6 +291,39 @@ export default function InventoryScreen() {
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
     <View style={styles.container}>
+      {/* Stock Health Chart */}
+      <View style={styles.chartSection}>
+        <View style={{ flex: 1, backgroundColor: 'transparent' }}>
+           <Text style={styles.chartTitle}>Stock Health</Text>
+           <Text style={styles.chartSub}>Breakdown of physical items</Text>
+           <View style={{ marginTop: 12, backgroundColor: 'transparent', gap: 6 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'transparent' }}>
+                 <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#4CAF50' }} />
+                 <Text style={{ color: '#aaa', fontSize: 11 }}>In Stock: {items.length - lowStockCount - outOfStockCount}</Text>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'transparent' }}>
+                 <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#FF9800' }} />
+                 <Text style={{ color: '#aaa', fontSize: 11 }}>Low: {lowStockCount}</Text>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'transparent' }}>
+                 <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#e94560' }} />
+                 <Text style={{ color: '#aaa', fontSize: 11 }}>Out: {outOfStockCount}</Text>
+              </View>
+           </View>
+        </View>
+        <PieChart
+          data={[
+            { value: Math.max(items.length - lowStockCount - outOfStockCount, 0), color: '#4CAF50' },
+            { value: lowStockCount, color: '#FF9800' },
+            { value: outOfStockCount, color: '#e94560' },
+          ].filter(d => d.value > 0)}
+          donut
+          radius={45}
+          innerRadius={30}
+          innerCircleColor={'#16213e'}
+        />
+      </View>
+
       {/* Summary Bar */}
       <View style={styles.summaryBar}>
         <TouchableOpacity
@@ -527,4 +561,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     elevation: 6,
   },
+  chartSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#16213e',
+    margin: 12,
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#0f3460',
+  },
+  chartTitle: { fontSize: 16, fontWeight: 'bold', color: '#fff' },
+  chartSub: { fontSize: 12, color: '#666', marginTop: 2 },
 });

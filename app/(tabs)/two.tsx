@@ -12,6 +12,8 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useFocusEffect, useRouter } from 'expo-router';
+import { BarChart } from 'react-native-gifted-charts';
+import { aggregateTrendData, type TrendData } from '@/lib/report-utils';
 
 type DashboardData = {
   todaySales: number;
@@ -55,8 +57,10 @@ export default function DashboardScreen() {
   const [branchSummaries, setBranchSummaries] = useState<BranchSummary[]>([]);
   const [businessTotal, setBusinessTotal] = useState({ revenue: 0, cost: 0, profit: 0, expenses: 0, netProfit: 0, transactions: 0 });
   const [recentSales, setRecentSales] = useState<RecentSale[]>([]);
+  const [trendData, setTrendData] = useState<TrendData[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [branchFilter, setBranchFilter] = useState<string>(currentBranch?.id || 'all');
+  const [announcement, setAnnouncement] = useState('');
 
   // Sync branch filter when user changes branch in Settings
   useEffect(() => {
@@ -74,157 +78,166 @@ export default function DashboardScreen() {
     }
   };
 
+  const loadAnnouncement = async () => {
+    try {
+      const { data, error } = await supabase.rpc('get_platform_settings');
+      if (error) throw error;
+      if (data?.platform_announcement) {
+        setAnnouncement(data.platform_announcement);
+      } else {
+        setAnnouncement('');
+      }
+    } catch (e) {
+      console.error('Failed to load announcement:', e);
+    }
+  };
+
   const loadDashboard = useCallback(async () => {
     if (!business || !currentBranch) return;
 
     const from = getDateFrom(period);
 
-    if (isAdmin) {
-      // ── Admin: filtered or cross-branch overview ──
-      let salesQ = supabase
-        .from('sales')
-        .select('branch_id, total_amount, sale_items(quantity, cost_price)')
-        .eq('business_id', business.id)
-        .eq('status', 'completed')
-        .gte('created_at', from);
-      if (branchFilter !== 'all') salesQ = salesQ.eq('branch_id', branchFilter);
-      const { data: salesData } = await salesQ;
+    try {
+      if (isAdmin) {
+        // ── Admin: parallel fetch ──
+        let salesQ = supabase
+          .from('sales')
+          .select('branch_id, total_amount, sale_items(quantity, cost_price)')
+          .eq('business_id', business.id)
+          .eq('status', 'completed')
+          .gte('created_at', from);
+        if (branchFilter !== 'all') salesQ = salesQ.eq('branch_id', branchFilter);
 
-      // Expenses for the period
-      let expQ = supabase
-        .from('expenses')
-        .select('branch_id, amount')
-        .eq('business_id', business.id)
-        .gte('date', from.split('T')[0]);
-      if (branchFilter !== 'all') expQ = expQ.eq('branch_id', branchFilter);
-      const { data: expData } = await expQ;
+        let expQ = supabase
+          .from('expenses')
+          .select('branch_id, amount')
+          .eq('business_id', business.id)
+          .gte('date', from.split('T')[0]);
+        if (branchFilter !== 'all') expQ = expQ.eq('branch_id', branchFilter);
 
-      // Build per-branch summaries
-      const branchMap: Record<string, BranchSummary> = {};
-      branches.forEach(b => {
-        branchMap[b.id] = { branch_id: b.id, branch_name: b.name, revenue: 0, cost: 0, profit: 0, transactions: 0, expenses: 0, netProfit: 0 };
-      });
+        let lowStockQ = supabase
+          .from('inventory')
+          .select('*, branches!inner(business_id)', { count: 'exact', head: true })
+          .eq('branches.business_id', business.id)
+          .lt('quantity', 5);
+        if (branchFilter !== 'all') lowStockQ = lowStockQ.eq('branch_id', branchFilter);
 
-      let totalRev = 0, totalCost = 0, totalTx = 0;
-      salesData?.forEach((sale: any) => {
-        const b = branchMap[sale.branch_id];
-        if (b) {
-          b.revenue += Number(sale.total_amount);
-          b.transactions += 1;
-          sale.sale_items?.forEach((item: any) => {
-            b.cost += Number(item.cost_price || 0) * Number(item.quantity);
-          });
-        }
-        totalRev += Number(sale.total_amount);
-        totalTx += 1;
-        sale.sale_items?.forEach((item: any) => {
-          totalCost += Number(item.cost_price || 0) * Number(item.quantity);
+        let recentQ = supabase
+          .from('sales')
+          .select('id, total_amount, created_at, status, branches(name)')
+          .eq('business_id', business.id)
+          .order('created_at', { ascending: false })
+          .limit(15);
+        if (branchFilter !== 'all') recentQ = recentQ.eq('branch_id', branchFilter);
+
+        const [
+          { data: salesData },
+          { data: expData },
+          { count: lowStockCount },
+          { count: totalProducts },
+          { data: recent }
+        ] = await Promise.all([
+          salesQ,
+          expQ,
+          lowStockQ,
+          supabase.from('products').select('*', { count: 'exact', head: true }).eq('business_id', business.id),
+          recentQ
+        ]);
+
+        // Process data
+        const branchMap: Record<string, BranchSummary> = {};
+        branches.forEach(b => {
+          branchMap[b.id] = { branch_id: b.id, branch_name: b.name, revenue: 0, cost: 0, profit: 0, transactions: 0, expenses: 0, netProfit: 0 };
         });
-      });
 
-      let totalExp = 0;
-      expData?.forEach((e: any) => {
-        const b = branchMap[e.branch_id];
-        if (b) b.expenses += Number(e.amount);
-        totalExp += Number(e.amount);
-      });
+        let totalRev = 0, totalCost = 0, totalTx = 0;
+        salesData?.forEach((sale: any) => {
+          const b = branchMap[sale.branch_id];
+          if (b) {
+            b.revenue += Number(sale.total_amount);
+            b.transactions += 1;
+            sale.sale_items?.forEach((item: any) => {
+              b.cost += Number(item.cost_price || 0) * Number(item.quantity);
+            });
+          }
+          totalRev += Number(sale.total_amount);
+          totalTx += 1;
+          sale.sale_items?.forEach((item: any) => {
+            totalCost += Number(item.cost_price || 0) * Number(item.quantity);
+          });
+        });
 
-      // Compute profits
-      Object.values(branchMap).forEach(b => {
-        b.profit = b.revenue - b.cost;
-        b.netProfit = b.profit - b.expenses;
-      });
+        let totalExp = 0;
+        expData?.forEach((e: any) => {
+          const b = branchMap[e.branch_id];
+          if (b) b.expenses += Number(e.amount);
+          totalExp += Number(e.amount);
+        });
 
-      const activeBranches = Object.values(branchMap).filter(b => b.transactions > 0 || b.expenses > 0);
-      setBranchSummaries(activeBranches);
-      setBusinessTotal({
-        revenue: totalRev,
-        cost: totalCost,
-        profit: totalRev - totalCost,
-        expenses: totalExp,
-        netProfit: totalRev - totalCost - totalExp,
-        transactions: totalTx,
-      });
+        Object.values(branchMap).forEach(b => {
+          b.profit = b.revenue - b.cost;
+          b.netProfit = b.profit - b.expenses;
+        });
 
-      // Low stock
-      let lowStockQ = supabase
-        .from('inventory')
-        .select('*, branches!inner(business_id)', { count: 'exact', head: true })
-        .eq('branches.business_id', business.id)
-        .lt('quantity', 5);
-      if (branchFilter !== 'all') lowStockQ = lowStockQ.eq('branch_id', branchFilter);
-      const { count: lowStockCount } = await lowStockQ;
+        const activeBranches = Object.values(branchMap).filter(b => b.transactions > 0 || b.expenses > 0);
+        setBranchSummaries(activeBranches);
+        setBusinessTotal({
+          revenue: totalRev,
+          cost: totalCost,
+          profit: totalRev - totalCost,
+          expenses: totalExp,
+          netProfit: totalRev - totalCost - totalExp,
+          transactions: totalTx,
+        });
 
-      // Total products
-      const { count: totalProducts } = await supabase
-        .from('products')
-        .select('*', { count: 'exact', head: true })
-        .eq('business_id', business.id);
+        setDashboard({
+          todaySales: totalRev,
+          todayTransactions: totalTx,
+          lowStockCount: lowStockCount || 0,
+          totalProducts: totalProducts || 0,
+        });
+        setRecentSales((recent || []).map((s: any) => ({
+          id: s.id, total_amount: s.total_amount, created_at: s.created_at, status: s.status, branch_name: s.branches?.name,
+        })));
 
-      setDashboard({
-        todaySales: totalRev,
-        todayTransactions: totalTx,
-        lowStockCount: lowStockCount || 0,
-        totalProducts: totalProducts || 0,
-      });
+        // Trend data for dashboard (7 days)
+        setTrendData(aggregateTrendData(salesData || [], 'week'));
 
-      // Recent sales
-      let recentQ = supabase
-        .from('sales')
-        .select('id, total_amount, created_at, status, branches(name)')
-        .eq('business_id', business.id)
-        .order('created_at', { ascending: false })
-        .limit(15);
-      if (branchFilter !== 'all') recentQ = recentQ.eq('branch_id', branchFilter);
-      const { data: recent } = await recentQ;
-      setRecentSales((recent || []).map((s: any) => ({
-        id: s.id, total_amount: s.total_amount, created_at: s.created_at, status: s.status, branch_name: s.branches?.name,
-      })));
+      } else {
+        // ── Non-admin: parallel fetch ──
+        const [
+          { data: salesData },
+          { count: lowStockCount },
+          { count: totalProducts },
+          { data: recent }
+        ] = await Promise.all([
+          supabase.from('sales').select('total_amount').eq('branch_id', currentBranch.id).gte('created_at', from).eq('status', 'completed'),
+          supabase.from('inventory').select('*', { count: 'exact', head: true }).eq('branch_id', currentBranch.id).lt('quantity', 5),
+          supabase.from('products').select('*', { count: 'exact', head: true }).eq('business_id', business.id),
+          supabase.from('sales').select('id, total_amount, created_at, status').eq('branch_id', currentBranch.id).order('created_at', { ascending: false }).limit(10)
+        ]);
 
-    } else {
-      // ── Non-admin: single branch ──
-      const { data: salesData } = await supabase
-        .from('sales')
-        .select('total_amount')
-        .eq('branch_id', currentBranch.id)
-        .gte('created_at', from)
-        .eq('status', 'completed');
+        const todaySales = salesData?.reduce((sum, s) => sum + Number(s.total_amount), 0) || 0;
+        const todayTransactions = salesData?.length || 0;
 
-      const todaySales = salesData?.reduce((sum, s) => sum + Number(s.total_amount), 0) || 0;
-      const todayTransactions = salesData?.length || 0;
-
-      const { count: lowStockCount } = await supabase
-        .from('inventory')
-        .select('*', { count: 'exact', head: true })
-        .eq('branch_id', currentBranch.id)
-        .lt('quantity', 5);
-
-      const { count: totalProducts } = await supabase
-        .from('products')
-        .select('*', { count: 'exact', head: true })
-        .eq('business_id', business.id);
-
-      setDashboard({ todaySales, todayTransactions, lowStockCount: lowStockCount || 0, totalProducts: totalProducts || 0 });
-      setBranchSummaries([]);
-      setBusinessTotal({ revenue: 0, cost: 0, profit: 0, expenses: 0, netProfit: 0, transactions: 0 });
-
-      const { data: recent } = await supabase
-        .from('sales')
-        .select('id, total_amount, created_at, status')
-        .eq('branch_id', currentBranch.id)
-        .order('created_at', { ascending: false })
-        .limit(10);
-      setRecentSales(recent || []);
+        setDashboard({ todaySales, todayTransactions, lowStockCount: lowStockCount || 0, totalProducts: totalProducts || 0 });
+        setBranchSummaries([]);
+        setBusinessTotal({ revenue: 0, cost: 0, profit: 0, expenses: 0, netProfit: 0, transactions: 0 });
+        setRecentSales(recent || []);
+      }
+    } catch (e) {
+      console.error('Dashboard load error:', e);
     }
   }, [business, currentBranch, branches, period, isAdmin, branchFilter]);
 
   useFocusEffect(useCallback(() => {
     loadDashboard();
+    loadAnnouncement();
   }, [loadDashboard]));
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await loadDashboard();
+    await Promise.all([loadDashboard(), loadAnnouncement()]);
     setRefreshing(false);
   };
 
@@ -263,6 +276,22 @@ export default function DashboardScreen() {
               </Text>
             </View>
 
+            {/* Platform Announcement */}
+            {announcement ? (
+              <View style={{ backgroundColor: '#e9456015', marginHorizontal: 16, marginBottom: 16, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: '#e9456033', flexDirection: 'row', gap: 12, alignItems: 'center' }}>
+                <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#e9456015', justifyContent: 'center', alignItems: 'center' }}>
+                  <FontAwesome name="bullhorn" size={18} color="#e94560" />
+                </View>
+                <View style={{ flex: 1, backgroundColor: 'transparent' }}>
+                   <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700' }}>Platform Message</Text>
+                   <Text style={{ color: '#ccc', fontSize: 13, marginTop: 2 }}>{announcement}</Text>
+                </View>
+                <TouchableOpacity onPress={() => setAnnouncement('')} style={{ padding: 8 }}>
+                   <FontAwesome name="times" size={14} color="#555" />
+                </TouchableOpacity>
+              </View>
+            ) : null}
+
             {/* Branch Filter (admin) */}
             {isAdmin && branches.length > 1 && (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>
@@ -298,6 +327,25 @@ export default function DashboardScreen() {
                     </Text>
                   </TouchableOpacity>
                 ))}
+              </View>
+            )}
+
+            {/* Trend Chart Mini */}
+            {trendData.length > 0 && (
+              <View style={[styles.chartCard, { marginBottom: 16 }]}>
+                <Text style={styles.chartTitle}>7-Day Revenue Pulse</Text>
+                <BarChart
+                  data={trendData.map(d => ({ value: d.value, label: d.label, labelTextStyle: { color: '#888', fontSize: 9 } }))}
+                  barWidth={18}
+                  noOfSections={3}
+                  barBorderRadius={4}
+                  frontColor="#e94560"
+                  yAxisThickness={0}
+                  xAxisThickness={0}
+                  hideRules
+                  yAxisTextStyle={{ color: '#555', fontSize: 9 }}
+                  isAnimated
+                />
               </View>
             )}
 
@@ -525,4 +573,17 @@ const styles = StyleSheet.create({
   statusText: { fontSize: 12, color: '#fff', fontWeight: 'bold', textTransform: 'capitalize' },
   emptyState: { alignItems: 'center', paddingTop: 40, backgroundColor: 'transparent' },
   emptyText: { color: '#555', fontSize: 16, marginTop: 12 },
+  chartCard: {
+    backgroundColor: '#16213e',
+    padding: 16,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#0f3460',
+  },
+  chartTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#aaa',
+    marginBottom: 12,
+  },
 });
