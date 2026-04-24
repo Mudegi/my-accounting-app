@@ -316,6 +316,7 @@ export default function LoginScreen() {
               style={styles.demoButton}
               onPress={async () => {
                 setLoading(true);
+                await supabase.auth.signOut(); // Ensure fresh session
                 const { error } = await signIn('kissakian@gmail.com', 'demo@123');
                 if (error) Alert.alert('Demo Login Failed', error.message);
                 setLoading(false);

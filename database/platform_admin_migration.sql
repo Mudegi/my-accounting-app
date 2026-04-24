@@ -23,18 +23,18 @@ END $$;
 --    then run this migration to promote it.
 -- ────────────────────────────────────────────────
 
--- Revoke super admin from demo account (safety)
+-- Revoke super admin from demo account
 UPDATE profiles
 SET is_super_admin = false
 WHERE id IN (
-  SELECT id FROM auth.users WHERE email = 'mudegiemma@gmail.com'
+  SELECT id FROM auth.users WHERE email = 'kissakian@gmail.com'
 );
 
 -- Grant super admin to platform owner
 UPDATE profiles
 SET is_super_admin = true
 WHERE id IN (
-  SELECT id FROM auth.users WHERE email = 'kissakian@gmail.com'
+  SELECT id FROM auth.users WHERE email = 'mudegiemma@gmail.com'
 );
 
 -- ────────────────────────────────────────────────
@@ -57,6 +57,7 @@ $$;
 -- 4) RPC: List all businesses (super admin only)
 -- ────────────────────────────────────────────────
 
+DROP FUNCTION IF EXISTS admin_list_businesses();
 CREATE OR REPLACE FUNCTION admin_list_businesses()
 RETURNS TABLE (
   id uuid,
@@ -111,6 +112,7 @@ $$;
 -- 5) RPC: Manually activate subscription (cash payment)
 -- ────────────────────────────────────────────────
 
+DROP FUNCTION IF EXISTS admin_activate_subscription(uuid, text, text, numeric, text);
 CREATE OR REPLACE FUNCTION admin_activate_subscription(
   p_business_id uuid,
   p_plan_name text,
@@ -189,6 +191,7 @@ $$;
 -- 6) RPC: Extend subscription manually
 -- ────────────────────────────────────────────────
 
+DROP FUNCTION IF EXISTS admin_extend_subscription(uuid, int, text);
 CREATE OR REPLACE FUNCTION admin_extend_subscription(
   p_business_id uuid,
   p_days int DEFAULT 30,
@@ -238,6 +241,7 @@ $$;
 -- 7) RPC: Deactivate / cancel subscription
 -- ────────────────────────────────────────────────
 
+DROP FUNCTION IF EXISTS admin_cancel_subscription(uuid, text);
 CREATE OR REPLACE FUNCTION admin_cancel_subscription(
   p_business_id uuid,
   p_reason text DEFAULT 'Cancelled by admin'
@@ -275,6 +279,7 @@ $$;
 -- 8) RPC: Get all payments (super admin)
 -- ────────────────────────────────────────────────
 
+DROP FUNCTION IF EXISTS admin_list_payments(int, int);
 CREATE OR REPLACE FUNCTION admin_list_payments(
   p_limit int DEFAULT 50,
   p_offset int DEFAULT 0
@@ -322,6 +327,7 @@ $$;
 -- 9) RPC: Platform stats for admin dashboard
 -- ────────────────────────────────────────────────
 
+DROP FUNCTION IF EXISTS admin_platform_stats();
 CREATE OR REPLACE FUNCTION admin_platform_stats()
 RETURNS jsonb
 LANGUAGE plpgsql
