@@ -7,12 +7,14 @@ export type PlatformContacts = {
   contact_phone: string;
   contact_whatsapp: string;
   contact_email: string;
+  platform_announcement: string;
 };
 
 const EMPTY_CONTACTS: PlatformContacts = {
   contact_phone: '',
   contact_whatsapp: '',
   contact_email: '',
+  platform_announcement: '',
 };
 
 let cached: PlatformContacts | null = null;
@@ -26,6 +28,7 @@ export async function getPlatformContacts(): Promise<PlatformContacts> {
       contact_phone: data?.contact_phone || '',
       contact_whatsapp: data?.contact_whatsapp || '',
       contact_email: data?.contact_email || '',
+      platform_announcement: data?.platform_announcement || '',
     };
     return cached;
   } catch (e) {

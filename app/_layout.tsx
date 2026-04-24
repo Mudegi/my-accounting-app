@@ -161,18 +161,24 @@ function RootLayoutNav() {
     if (!session && !inAuthGroup) {
       // Not signed in → redirect to login
       router.replace('/login');
-    } else if (session && inAuthGroup) {
+    } else if (session && !profile && !inOnboarding) {
+      // Signed in but no profile → needs onboarding/setup
+      router.replace('/onboarding');
+    } else if (session && profile && inAuthGroup) {
       // Signed in → check if needs onboarding
-      if (business && !business.subscription_status) {
+      const needsOnboarding = !business || !business.name || !business.country || !business.default_currency;
+      
+      if (needsOnboarding) {
         router.replace('/onboarding');
-      } else if (business && (business.subscription_status === 'expired' || business.subscription_status === 'cancelled')) {
+      } else if (business.subscription_status === 'expired' || business.subscription_status === 'cancelled') {
         router.replace('/subscription');
       } else {
         router.replace('/(tabs)');
       }
     } else if (session && !inAuthGroup && !inOnboarding && !inSubscription && business) {
       // Already signed in — enforce paywall for expired/cancelled
-      if (!business.subscription_status) {
+      const needsOnboarding = !business.name || !business.country || !business.default_currency;
+      if (needsOnboarding) {
         router.replace('/onboarding');
       } else if (business.subscription_status === 'expired' || business.subscription_status === 'cancelled') {
         router.replace('/subscription');

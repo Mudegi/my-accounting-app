@@ -36,7 +36,7 @@ export default function UnitSearchModal({ visible, onClose, onSelect }: UnitSear
       .from('units_of_measure')
       .select('code, name')
       .order('name')
-      .limit(50);
+      .limit(1000);
     if (data) setUnits(data);
     setLoading(false);
   };
@@ -51,7 +51,7 @@ export default function UnitSearchModal({ visible, onClose, onSelect }: UnitSear
       .select('code, name')
       .or(`name.ilike.%${text}%,code.ilike.%${text}%`)
       .order('name')
-      .limit(50);
+      .limit(1000);
     
     if (data) setUnits(data);
     setLoading(false);

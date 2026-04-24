@@ -30,6 +30,35 @@ export default function OnboardingScreen() {
 
   const [step, setStep] = useState<Step>('business');
   const [saving, setSaving] = useState(false);
+  const [isHealing, setIsHealing] = useState(true);
+
+  // Initialize data and check for skipping
+  useEffect(() => {
+    if (!business) return;
+
+    // Determine initial step based on what's missing
+    if (!business.name || !business.country) {
+      setStep('business');
+    } else if (!business.default_currency) {
+      setStep('currency');
+    } else {
+      setStep('plan');
+    }
+
+    // If everything is already set (e.g. from Signup RPC), we can auto-finish
+    const checkAutoFinish = async () => {
+      if (business.name && business.country && business.default_currency && business.subscription_status) {
+        console.log('[Onboarding] Business already setup, finalizing...');
+        router.replace('/(tabs)');
+        return;
+      }
+      
+      // If we reach here, we need the UI, so stop healing splash
+      setIsHealing(false);
+    };
+
+    checkAutoFinish();
+  }, [business]);
 
   // Step 1: Business details
   const [bizCountry, setBizCountry] = useState(business?.country || '');
@@ -51,6 +80,28 @@ export default function OnboardingScreen() {
   const [showCurrencyPicker, setShowCurrencyPicker] = useState(false);
 
   useEffect(() => {
+    // SELF-HEALING: If we are on this screen but have no profile/business, 
+    // it means the signup RPC failed or is slow. Let's try to trigger it manually.
+    const healAccount = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user && !business) {
+        setIsHealing(true);
+        console.log('[Onboarding] Healing account for:', user.id);
+        const { error } = await supabase.rpc('setup_new_account', {
+          p_user_id: user.id,
+          p_full_name: user.user_metadata?.full_name || 'System User',
+          p_business_name: user.user_metadata?.business_name || 'My Business',
+          p_country: user.user_metadata?.country || 'Uganda',
+          p_currency: user.user_metadata?.currency || 'UGX'
+        });
+        if (!error) {
+          await reloadUserData();
+        }
+        setIsHealing(false);
+      }
+    };
+    healAccount();
+
     loadCurrencies().then(setCurrencies);
     getPlans().then((p) => {
       setPlans(p);
@@ -150,6 +201,15 @@ export default function OnboardingScreen() {
     }
     setSaving(false);
   };
+
+  if (isHealing) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color="#f43f5e" />
+        <Text style={{ marginTop: 20, fontSize: 18 }}>Setting up your business...</Text>
+      </View>
+    );
+  }
 
   const renderStepIndicator = () => (
     <View style={styles.stepIndicator}>

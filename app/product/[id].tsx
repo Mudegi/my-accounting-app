@@ -108,7 +108,7 @@ export default function ProductFormScreen() {
       const defTax = taxes.find(t => t.is_default);
       if (defTax) setTaxCategoryCode(defTax.code);
     }
-  }, [id, taxes]);
+  }, [id, taxes, currentBranch]);
 
   const loadCategories = async () => {
     if (!business) return;
@@ -126,7 +126,7 @@ export default function ProductFormScreen() {
         .from('products')
         .select(`
           *,
-          inventory!inner(selling_price, avg_cost_price, quantity, reorder_level)
+          inventory(selling_price, avg_cost_price, quantity, reorder_level)
         `)
         .eq('id', productId)
         .eq('inventory.branch_id', currentBranch?.id)
@@ -433,11 +433,13 @@ export default function ProductFormScreen() {
 
       if (result.success && result.product_code) {
         const now = new Date().toISOString();
-        await supabase.from('products').update({
+        const { error: upError } = await supabase.from('products').update({
           efris_product_code: result.product_code,
           efris_item_code: efrisItemCode,
           efris_registered_at: now,
         }).eq('id', theId);
+
+        if (upError) throw upError;
         setEfrisProductCode(result.product_code);
         setEfrisRegisteredAt(now);
         if (isNew) {

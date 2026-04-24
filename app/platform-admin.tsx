@@ -58,16 +58,16 @@ type BusinessRow = {
 };
 
 type PaymentRow = {
-  id: string;
-  business_id: string;
-  business_name: string;
-  amount: number;
-  currency: string;
-  payment_method: string;
-  payment_reference: string | null;
-  status: string;
-  paid_at: string | null;
-  created_at: string;
+  res_id: string;
+  res_business_id: string;
+  res_business_name: string;
+  res_amount: number;
+  res_currency: string;
+  res_payment_method: string;
+  res_payment_reference: string | null;
+  res_status: string;
+  res_paid_at: string | null;
+  res_created_at: string;
 };
 
 const PLANS = ['starter', 'basic', 'pro'] as const;
@@ -177,8 +177,8 @@ export default function PlatformAdminScreen() {
       const { data: trend } = await supabase.rpc('admin_platform_signup_trend', { p_days: 14 });
       if (trend) {
         setSignupTrend((trend as any[]).map(t => ({
-          value: Number(t.count),
-          label: new Date(t.day).getDate().toString()
+          value: Number(t.res_count),
+          label: new Date(t.res_day).getDate().toString()
         })));
       }
 
@@ -211,7 +211,7 @@ export default function PlatformAdminScreen() {
   const loadLogs = async () => {
     try {
       setLoadingLogs(true);
-      const { data, error } = await supabase.rpc('admin_list_activity_logs', { p_limit: 100 });
+      const { data, error } = await supabase.rpc('admin_fetch_activity_logs_v2', { p_limit: 100 });
       if (error) throw error;
       setLogs(data || []);
     } catch (e: any) {
@@ -365,7 +365,7 @@ export default function PlatformAdminScreen() {
         p_business_id: selectedBiz.id,
         p_is_efris_enabled: efrisEnabled,
         p_efris_api_key: efrisApiKey.trim() || null,
-        p_efris_api_url: efrisApiUrl.trim() || null,
+        p_efris_api_url: null,
         p_efris_test_mode: efrisTestMode,
       });
       if (error) throw error;
@@ -602,17 +602,17 @@ export default function PlatformAdminScreen() {
             ) : (
               <View style={{ paddingHorizontal: 16, backgroundColor: 'transparent' }}>
                 {leaderboard.map((item, index) => (
-                  <View key={item.business_id} style={styles.leaderboardRow}>
+                  <View key={item.res_business_id} style={styles.leaderboardRow}>
                     <View style={styles.rankBadge}>
                       <Text style={styles.rankText}>{index + 1}</Text>
                     </View>
                     <View style={{ flex: 1, backgroundColor: 'transparent' }}>
-                      <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700' }}>{item.business_name}</Text>
+                      <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700' }}>{item.res_business_name}</Text>
                       <Text style={{ color: '#888', fontSize: 11 }}>
-                        {item.transaction_count} transactions · Last active: {item.last_activity ? new Date(item.last_activity).toLocaleDateString() : 'Never'}
+                        {item.res_transaction_count} transactions · Last active: {item.res_last_activity ? new Date(item.res_last_activity).toLocaleDateString() : 'Never'}
                       </Text>
                     </View>
-                    <Text style={{ color: '#4CAF50', fontWeight: 'bold', fontSize: 14 }}>{fmt(item.total_revenue)}</Text>
+                    <Text style={{ color: '#4CAF50', fontWeight: 'bold', fontSize: 14 }}>{fmt(item.res_total_revenue)}</Text>
                   </View>
                 ))}
               </View>
@@ -861,29 +861,29 @@ export default function PlatformAdminScreen() {
         // ──────── PAYMENTS TAB ────────
         <FlatList
           data={payments}
-          keyExtractor={(p) => p.id}
+          keyExtractor={(p) => p.res_id}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor="#e94560" />}
           renderItem={({ item }) => (
             <View style={styles.payCard}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'transparent' }}>
                 <View style={{ flex: 1, backgroundColor: 'transparent' }}>
-                  <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600' }}>{item.business_name}</Text>
+                  <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600' }}>{item.res_business_name}</Text>
                   <Text style={{ color: '#aaa', fontSize: 12 }}>
-                    {paymentMethodLabel(item.payment_method)} · {new Date(item.created_at).toLocaleDateString()}
+                    {paymentMethodLabel(item.res_payment_method)} · {new Date(item.res_created_at).toLocaleDateString()}
                   </Text>
-                  {item.payment_reference && (
-                    <Text style={{ color: '#777', fontSize: 11, marginTop: 2 }} numberOfLines={1}>{item.payment_reference}</Text>
+                  {item.res_payment_reference && (
+                    <Text style={{ color: '#777', fontSize: 11, marginTop: 2 }} numberOfLines={1}>{item.res_payment_reference}</Text>
                   )}
                 </View>
                 <View style={{ alignItems: 'flex-end', backgroundColor: 'transparent' }}>
                   <Text style={{ color: '#4CAF50', fontSize: 15, fontWeight: '700' }}>
-                    {item.currency} {Number(item.amount).toLocaleString()}
+                    {item.res_currency} {Number(item.res_amount).toLocaleString()}
                   </Text>
                   <View style={{
-                    backgroundColor: item.status === 'completed' ? '#2d6a4f' : item.status === 'pending' ? '#FF9800' : '#8B1A1A',
+                    backgroundColor: item.res_status === 'completed' ? '#2d6a4f' : item.res_status === 'pending' ? '#FF9800' : '#8B1A1A',
                     borderRadius: 8, paddingHorizontal: 6, paddingVertical: 1, marginTop: 2,
                   }}>
-                    <Text style={{ color: '#fff', fontSize: 9, fontWeight: '600', textTransform: 'uppercase' }}>{item.status}</Text>
+                    <Text style={{ color: '#fff', fontSize: 9, fontWeight: '600', textTransform: 'uppercase' }}>{item.res_status}</Text>
                   </View>
                 </View>
               </View>
@@ -1183,17 +1183,6 @@ export default function PlatformAdminScreen() {
                   secureTextEntry
                 />
 
-                {/* API URL */}
-                <Text style={styles.formLabel}>API URL (optional)</Text>
-                <TextInput
-                  style={styles.modalInput}
-                  placeholder="Leave blank for default middleware URL"
-                  placeholderTextColor="#555"
-                  value={efrisApiUrl}
-                  onChangeText={setEfrisApiUrl}
-                  autoCapitalize="none"
-                  keyboardType="url"
-                />
 
                 {/* Environment toggle */}
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, backgroundColor: 'transparent' }}>
@@ -1317,7 +1306,7 @@ const styles = StyleSheet.create({
   bizHeader: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: 'transparent' },
   bizName: { color: '#fff', fontSize: 15, fontWeight: '700' },
   bizSub: { color: '#aaa', fontSize: 12, marginTop: 2 },
-  bizActions: { flexDirection: 'row', gap: 8, marginTop: 10, backgroundColor: 'transparent' },
+  bizActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10, backgroundColor: 'transparent' },
   actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 },
   actionBtnText: { color: '#fff', fontSize: 11, fontWeight: '600' },
 

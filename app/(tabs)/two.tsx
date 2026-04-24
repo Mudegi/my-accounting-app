@@ -6,13 +6,14 @@ import {
   RefreshControl,
   Alert,
   ScrollView,
+  Dimensions,
 } from 'react-native';
 import { Text, View } from '@/components/Themed';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { BarChart } from 'react-native-gifted-charts';
+import { LineChart } from 'react-native-gifted-charts';
 import { aggregateTrendData, type TrendData } from '@/lib/report-utils';
 
 type DashboardData = {
@@ -249,6 +250,12 @@ export default function DashboardScreen() {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
+  const formatShortValue = (val: number) => {
+    if (val >= 1000000) return (val / 1000000).toFixed(1) + 'M';
+    if (val >= 1000) return (val / 1000).toFixed(1) + 'K';
+    return val.toString();
+  };
+
   const periodLabel = (p: Period) => {
     switch (p) {
       case 'today': return 'Today';
@@ -336,18 +343,55 @@ export default function DashboardScreen() {
             {/* Trend Chart Mini */}
             {trendData.length > 0 && (
               <View style={[styles.chartCard, { marginBottom: 16 }]}>
-                <Text style={styles.chartTitle}>7-Day Revenue Pulse</Text>
-                <BarChart
-                  data={trendData.map(d => ({ value: d.value, label: d.label, labelTextStyle: { color: '#888', fontSize: 9 } }))}
-                  barWidth={18}
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, backgroundColor: 'transparent' }}>
+                  <Text style={styles.chartTitle}>7-Day Revenue Pulse</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#e9456020', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}>
+                    <FontAwesome name="line-chart" size={10} color="#e94560" />
+                    <Text style={{ color: '#e94560', fontSize: 10, fontWeight: 'bold' }}>Live</Text>
+                  </View>
+                </View>
+                <LineChart
+                  areaChart
+                  curved
+                  data={trendData.map(d => ({ 
+                    value: d.value, 
+                    label: d.label,
+                  }))}
+                  width={Dimensions.get('window').width - 80}
+                  height={140}
+                  spacing={50}
+                  initialSpacing={20}
+                  endSpacing={20}
+                  color="#e94560"
+                  thickness={4}
+                  startFillColor="rgba(233, 69, 96, 0.3)"
+                  endFillColor="rgba(233, 69, 96, 0.01)"
+                  startOpacity={0.4}
+                  endOpacity={0.1}
                   noOfSections={3}
-                  barBorderRadius={4}
-                  frontColor="#e94560"
                   yAxisThickness={0}
                   xAxisThickness={0}
                   hideRules
+                  yAxisLabelWidth={40}
                   yAxisTextStyle={{ color: '#555', fontSize: 9 }}
+                  xAxisLabelTextStyle={{ color: '#888', fontSize: 9 }}
+                  formatYLabel={(label) => formatShortValue(Number(label))}
                   isAnimated
+                  animateOnDataChange
+                  animationDuration={1000}
+                  pointerConfig={{
+                    pointerStripColor: '#e94560',
+                    pointerStripWidth: 2,
+                    pointerColor: '#e94560',
+                    radius: 4,
+                    pointerLabelComponent: (items: any) => {
+                      return (
+                        <View style={{ backgroundColor: '#1a1a2e', padding: 8, borderRadius: 8, borderWidth: 1, borderColor: '#e9456033', position: 'absolute', bottom: 20, left: -40, width: 100 }}>
+                          <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold', textAlign: 'center' }}>{fmt(items[0].value)}</Text>
+                        </View>
+                      );
+                    }
+                  }}
                 />
               </View>
             )}

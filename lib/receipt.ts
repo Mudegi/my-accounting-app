@@ -127,7 +127,7 @@ const TAX_CATEGORY_LABELS: Record<string, string> = {
 };
 
 // ─── Extract EFRIS fields with fallback chains ────────────────────
-function extractEfris(resp: any) {
+function extractEfris(resp: any, localSellerName?: string) {
   if (!resp) return null;
   const fd = resp.fiscal_data || {};
   const seller = resp.seller || {};
@@ -143,7 +143,7 @@ function extractEfris(resp: any) {
     sellerTradeName: (seller.trade_name || seller.legal_name || '').toUpperCase(),
     sellerAddress: seller.address || '',
     sellerRef: seller.reference_number || resp.invoice_number || '',
-    servedBy: seller.served_by || 'API User',
+    servedBy: localSellerName || seller.served_by || 'Staff',
 
     // Fiscal / URA
     documentType: fd.document_type || 'Original',
@@ -195,7 +195,17 @@ function extractEfris(resp: any) {
  */
 export async function generateReceiptHtml(data: ReceiptData): Promise<string> {
   const cur = data.currencySymbol || 'UGX';
-  const efris = data.isFiscalized ? extractEfris(data.efrisResponse) : null;
+  // Use isFiscalized as the primary switch. If true, we MUST show EFRIS layout.
+  const isFiscal = !!data.isFiscalized;
+  const efris = isFiscal ? (extractEfris(data.efrisResponse, data.sellerName) || { 
+    sellerTin: data.businessTin || '', 
+    sellerLegalName: data.businessName, 
+    fdn: data.efrisFdn, 
+    verificationCode: data.efrisVerificationCode, 
+    qrCode: data.efrisQrCode,
+    items: [], taxDetails: [], netAmount: data.subtotal, taxAmount: data.taxAmount, grossAmount: data.totalAmount,
+    currency: cur
+  }) : null;
 
   // Generate QR code SVG if fiscal
   let qrSvg = '';

@@ -155,7 +155,7 @@ export default function PurchasesScreen() {
     if (!business) return;
     const { data } = await supabase
       .from('products')
-      .select('id, name, efris_product_code, is_service')
+      .select('id, name, efris_product_code, efris_item_code, is_service')
       .eq('business_id', business.id)
       .eq('is_service', false) // Filter out services
       .order('name');
@@ -182,7 +182,10 @@ export default function PurchasesScreen() {
   const openForm = () => {
     loadProducts();
     loadSuppliers(); 
-    const defTax = taxes.find(t => t.is_default) || taxes[0] || { code: '01', rate: 0.18 };
+    
+    // Find "No Tax" or 0% tax by default
+    const noTax = taxes.find(t => t.rate === 0) || taxes.find(t => t.is_default) || taxes[0];
+    const defTax = noTax || { code: '00', rate: 0, name: 'No Tax' };
     setLineItems([{
       id: Math.random().toString(),
       product_id: '',
@@ -198,7 +201,8 @@ export default function PurchasesScreen() {
   };
 
   const addLine = () => {
-    const defTax = taxes.find(t => t.is_default) || taxes[0] || { code: '01', rate: 0.18 };
+    const noTax = taxes.find(t => t.rate === 0) || taxes.find(t => t.is_default) || taxes[0];
+    const defTax = noTax || { code: '00', rate: 0, name: 'No Tax' };
     setLineItems([...lineItems, {
       id: Math.random().toString(),
       product_id: '',
@@ -288,12 +292,13 @@ export default function PurchasesScreen() {
 
       // Update Inventory (Convert to base currency cost for stock valuation)
       for (const item of validItems) {
-        await supabase.rpc('increment_inventory', {
+        const { error: incErr } = await supabase.rpc('increment_inventory', {
           p_branch_id: currentBranch.id,
           p_product_id: item.product_id,
           p_quantity: parseFloat(item.quantity),
           p_unit_cost: parseFloat(item.unit_cost) / exchangeRate,
         });
+        if (incErr) throw incErr;
       }
 
       // Accounting
@@ -323,7 +328,7 @@ export default function PurchasesScreen() {
             const p = products.find(prod => prod.id === l.product_id);
             if (!p?.efris_product_code) return null;
             return {
-              goodsCode: p.efris_product_code,
+              goodsCode: p.efris_item_code || p.efris_product_code,
               quantity: l.quantity,
               unitPrice: l.unit_cost,
             };

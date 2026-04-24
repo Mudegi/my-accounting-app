@@ -55,7 +55,7 @@ export default function SettingsScreen() {
   const [devices, setDevices] = useState<DeviceSession[]>([]);
   const [loadingDevices, setLoadingDevices] = useState(false);
   const [currentDeviceId, setCurrentDeviceId] = useState<string>('');
-  const [expandedSection, setExpandedSection] = useState<string | null>('profile'); // Default expand profile
+  const [expandedSection, setExpandedSection] = useState<string | null>(null); // All collapsed by default
 
   // Business Profile states
   const [isEditingProfile, setIsEditingProfile] = useState(false);
@@ -69,6 +69,7 @@ export default function SettingsScreen() {
   const [editFiscalMonth, setEditFiscalMonth] = useState(1);
   const [editDefaultCurrency, setEditDefaultCurrency] = useState(business?.default_currency || 'UGX');
   const [editCountry, setEditCountry] = useState(business?.country || '');
+  const [editReceiptTitle, setEditReceiptTitle] = useState(business?.receipt_title || 'SALES INVOICE');
   const [availableCurrencies, setAvailableCurrencies] = useState<Currency[]>([]);
   const [logoUrl, setLogoUrl] = useState(business?.logo_url || null);
   const [savingProfile, setSavingProfile] = useState(false);
@@ -91,6 +92,7 @@ export default function SettingsScreen() {
       setEditFiscalMonth(business.fiscal_year_start_month || 1);
       setEditDefaultCurrency(business.default_currency || 'UGX');
       setEditCountry(business.country || '');
+      setEditReceiptTitle(business.receipt_title || 'SALES INVOICE');
       setLogoUrl(business.logo_url || null);
     }
     if (profile && !isEditingProfile) {
@@ -233,6 +235,7 @@ export default function SettingsScreen() {
           fiscal_year_start_month: editFiscalMonth,
           default_currency: editDefaultCurrency,
           country: editCountry,
+          receipt_title: editReceiptTitle,
         })
         .eq('id', business.id);
       
@@ -506,6 +509,22 @@ export default function SettingsScreen() {
                 <Text style={{ color: '#888', fontSize: 11, marginTop: 4 }}>Used for all pricing and base accounting reports</Text>
               </View>
 
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Receipt Header Title</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
+                  {['SALES INVOICE', 'SALES RECEIPT', 'TAX INVOICE', 'CASH SALE'].map((t) => (
+                    <TouchableOpacity 
+                      key={t} 
+                      onPress={() => setEditReceiptTitle(t)}
+                      style={{ paddingHorizontal: 12, paddingVertical: 8, backgroundColor: editReceiptTitle === t ? '#e94560' : '#222', marginRight: 8, borderRadius: 6 }}
+                    >
+                      <Text style={{ color: '#fff', fontSize: 12, fontWeight: '600' }}>{t}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+                <Text style={{ color: '#888', fontSize: 11, marginTop: 4 }}>This title appears at the top of your printed receipts</Text>
+              </View>
+
               <TouchableOpacity
                 style={[styles.saveBtn, savingProfile && { opacity: 0.7 }]}
                 onPress={handleSaveProfile}
@@ -533,6 +552,7 @@ export default function SettingsScreen() {
                  label="Fiscal Year Start" 
                  value={['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][(business?.fiscal_year_start_month || 1) - 1]} 
                />
+              <InfoRow icon="file-text" label="Receipt Title" value={business?.receipt_title || 'SALES INVOICE'} />
             </View>
           )}
         </SettingsSection>

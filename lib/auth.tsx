@@ -130,6 +130,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatus | null>(null);
   const initialLoadDone = React.useRef(false);
   const appState = useRef(AppState.currentState);
+  const isSignUpInProgress = useRef(false);
 
   // ── Idle auto-logout: track last active time ──
   const touchActivity = async () => {
@@ -202,7 +203,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         setSession(session);
         setUser(session?.user ?? null);
-        if (session?.user) {
+        if (session?.user && !isSignUpInProgress.current) {
           await loadUserData(session.user.id);
         } else {
           setProfile(null);
@@ -223,7 +224,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       let profileData = null;
       let profileError = null;
       let retries = 0;
-      const MAX_RETRIES = 5;
+      const MAX_RETRIES = 8;
 
       while (retries < MAX_RETRIES) {
         try {
@@ -252,9 +253,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (!profileData) {
-        console.error('No profile record found after retries for user:', userId);
-        setError('Profile not found. Please contact support or try logging in again.');
-        setLoading(false); // Stop the spinner so UI can show retry
+        console.log('[Auth] Profile not found yet for:', userId);
+        setProfile(null);
+        setLoading(false);
         return;
       }
 
@@ -266,7 +267,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .from('businesses')
         .select('*')
         .eq('id', profileData.business_id)
-        .single();
+        .maybeSingle();
 
       if (bizError) {
         console.error('Business load error:', bizError);
@@ -376,6 +377,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signUp = async (email: string, password: string, fullName: string, businessName: string, country: string, currency: string) => {
     try {
+      isSignUpInProgress.current = true;
       setIsInitializing(true);
       // 1. Create the auth user
       const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -421,13 +423,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // This is important because the onAuthStateChange listener might be slightly delayed
         await loadUserData(authData.user.id);
       }
-
-      setIsInitializing(false);
       return { error: null };
     } catch (e: any) {
       console.error('Signup error:', e);
-      setIsInitializing(false);
       return { error: { message: e.message || 'Signup failed' } };
+    } finally {
+      isSignUpInProgress.current = false;
+      setIsInitializing(false);
     }
   };
 

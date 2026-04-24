@@ -256,7 +256,9 @@ export default function ReceiptScreen() {
               )}
               {receiptData.businessEmail && <Text style={s.receiptMeta}>{receiptData.businessEmail}</Text>}
               <Text style={s.receiptMeta}>CURRENCY: {receiptData.currencySymbol}</Text>
-              <Text style={[s.receiptBizName, { fontSize: 12, marginTop: 8, textDecorationLine: 'underline' }]}>SALES INVOICE</Text>
+              <Text style={[s.receiptBizName, { fontSize: 12, marginTop: 8, textDecorationLine: 'underline' }]}>
+                {business?.receipt_title || 'SALES INVOICE'}
+              </Text>
               <View style={s.divider} />
             </>
           )}
@@ -273,7 +275,7 @@ export default function ReceiptScreen() {
                 )}
                 {seller.address ? <Row label="Address" value={seller.address} small /> : null}
                 <Row label="Ref No" value={seller.reference_number || receiptData.invoiceNumber || ''} bold />
-                <Row label="Served by" value={seller.served_by || receiptData.sellerName} />
+                <Row label="Served by" value={receiptData.sellerName || seller.served_by || 'Staff'} />
               </View>
             </>
           ) : (

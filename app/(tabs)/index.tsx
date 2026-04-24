@@ -247,7 +247,7 @@ export default function SalesScreen() {
     const { data } = await supabase
       .from('products')
       .select(`
-        id, name, barcode, image_url, tax_category_code, is_service,
+        id, name, barcode, image_url, tax_category_code, is_service, efris_product_code,
         inventory!inner(selling_price, avg_cost_price, quantity)
       `)
       .eq('business_id', business.id)
@@ -269,6 +269,7 @@ export default function SalesScreen() {
           stock_quantity: p.inventory[0]?.quantity || 0,
           tax_category_code: p.tax_category_code || '01',
           is_service: p.is_service ?? false,
+          efris_product_code: p.efris_product_code || null,
         }));
       setAllProducts(results);
       setSearchResults(results);
@@ -339,7 +340,7 @@ export default function SalesScreen() {
     const { data } = await supabase
       .from('products')
       .select(`
-        id, name, barcode, image_url, tax_category_code, is_service,
+        id, name, barcode, image_url, tax_category_code, is_service, efris_product_code,
         inventory!inner(selling_price, avg_cost_price, quantity)
       `)
       .eq('business_id', business.id)
@@ -399,7 +400,7 @@ export default function SalesScreen() {
     // Resolve tax rate from product's tax category or business defaults
     const taxCat = taxes.find(t => t.code === product.tax_category_code);
     const defaultTaxRate = taxCat?.rate ?? 0;
-    const defaultTaxCode = product.tax_category_code || (taxes.find(t => t.is_default)?.code) || '11';
+    const defaultTaxCode = product.tax_category_code || (taxes.find(t => t.is_default)?.code) || (taxes[0]?.code) || '00';
     setCart((prev) => {
       const existing = prev.find((item) => item.product_id === product.id);
       if (existing) {
@@ -694,33 +695,29 @@ export default function SalesScreen() {
 
       if (itemsError) throw itemsError;
 
-      // Batch decrement inventory for all physical goods in one request
-      const physicalItems = cart.filter(i => !i.is_service).map(i => ({
-        product_id: i.product_id,
-        quantity: i.quantity
-      }));
-
+      // We'll calculate COGS but only decrement inventory later if EFRIS is active
       let actualCOGS = 0;
       let goodsRevenue = cart.filter(i => !i.is_service).reduce((sum, i) => sum + (i.price * i.quantity), 0);
       let serviceRevenue = cart.filter(i => i.is_service).reduce((sum, i) => sum + (i.price * i.quantity), 0);
 
-      if (physicalItems.length > 0) {
-        const { data: avcoResults, error: batchError } = await supabase.rpc('decrement_inventory_batch', {
-          p_branch_id: currentBranch.id,
-          p_items: physicalItems
-        });
-
-        if (batchError) {
-          console.error('Batch inventory decrement failed:', batchError.message);
-          // Fallback warning but allow sale to proceed since sale record is already saved
-        } else if (avcoResults) {
-          // Map the returned AVCOs back to the items to calculate total COGS
-          avcoResults.forEach((res: any) => {
-            const item = cart.find(i => i.product_id === res.product_id);
-            if (item) {
-              actualCOGS += (Number(res.avco) || 0) * Number(item.quantity);
-            }
+      // Inventory decrement is moved to AFTER fiscalization for EFRIS sales
+      if (!(withEfris && efrisEnabled)) {
+        const physicalItems = cart.filter(i => !i.is_service).map(i => ({
+          product_id: i.product_id,
+          quantity: i.quantity
+        }));
+        
+        if (physicalItems.length > 0) {
+          const { data: avcoResults } = await supabase.rpc('decrement_inventory_batch', {
+            p_branch_id: currentBranch.id,
+            p_items: physicalItems
           });
+          if (avcoResults) {
+            avcoResults.forEach((res: any) => {
+              const item = cart.find(i => i.product_id === res.product_id);
+              if (item) actualCOGS += (Number(res.avco) || 0) * Number(item.quantity);
+            });
+          }
         }
       }
 
@@ -797,6 +794,7 @@ export default function SalesScreen() {
         setLastSaleId(sale.id);
         setLastSaleTotal(Math.round(totalAmount));
         setLastSaleDiscount(Math.round(globalDiscountAmount)); // only global (extra) discount
+        setPaymentMethod('102'); // Force Cash (102) for EFRIS by default
         loadCustomers();
         setShowFiscalize(true);
       } else {
@@ -808,6 +806,7 @@ export default function SalesScreen() {
       setDiscountMode('amount');
       setCreditCustomer(null);
       setCreditCustomerSearch('');
+      setSalePayMethod('cash'); // Force back to cash for next sale
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to complete sale');
     }
@@ -827,19 +826,36 @@ export default function SalesScreen() {
         testMode: business.efris_test_mode ?? true,
       };
 
+      console.log('Attempting to fiscalize sale:', lastSaleId);
+      
       // Get sale items with product EFRIS data
-      const { data: saleItems } = await supabase
+      let { data: saleItems, error: fetchError } = await supabase
         .from('sale_items')
         .select(`*, products:product_id(efris_product_code, efris_item_code, commodity_code, tax_category_code, unit)`)
         .eq('sale_id', lastSaleId);
+      
+      if (fetchError) console.error('Fetch sale items error:', fetchError.message);
 
-      if (!saleItems || saleItems.length === 0) { Alert.alert('Error', 'No sale items found'); setFiscalizing(false); return; }
+      if (!saleItems || saleItems.length === 0) {
+        // One quick retry
+        const { data: retryItems } = await supabase
+          .from('sale_items')
+          .select(`*, products:product_id(efris_product_code, efris_item_code, commodity_code, tax_category_code, unit)`)
+          .eq('sale_id', lastSaleId);
+        saleItems = retryItems;
+      }
+
+      if (!saleItems || saleItems.length === 0) { 
+        Alert.alert('Error', 'No sale items found for this record. Try again or skip to print receipt.'); 
+        setFiscalizing(false); 
+        return; 
+      }
 
       // Warn about unregistered items
       const unregistered = saleItems.filter((si: any) => !si.products?.efris_product_code);
       if (unregistered.length > 0) {
         const names = unregistered.map((si: any) => si.product_name).join(', ');
-        Alert.alert('Unregistered Products', `These products are not registered with EFRIS and cannot be fiscalized: ${names}. Register them in the product form first.`);
+        Alert.alert('EFRIS Registration Required', `The following items are not registered with EFRIS: ${names}. Please register them in the product form before fiscalizing.`);
         setFiscalizing(false); return;
       }
 
@@ -881,7 +897,7 @@ export default function SalesScreen() {
       if (result.success) {
         // Store the full EFRIS response for receipt rendering
         const efrisResponse = result.fullEfrisResponse || result;
-        await supabase.from('sales').update({
+        const { error: updateErr } = await supabase.from('sales').update({
           is_fiscalized: true,
           efris_fdn: result.fdn || null,
           efris_verification_code: result.verification_code || null,
@@ -895,6 +911,20 @@ export default function SalesScreen() {
           efris_fiscalized_at: new Date().toISOString(),
           customer_id: selectedCustomerId || null,
         }).eq('id', lastSaleId);
+
+        if (updateErr) throw updateErr;
+
+        // NOW DECREMENT INVENTORY after successful fiscalization
+        const physicalItems = saleItems.filter((si: any) => !si.products?.is_service).map((si: any) => ({
+          product_id: si.product_id,
+          quantity: si.quantity
+        }));
+        if (physicalItems.length > 0) {
+          await supabase.rpc('decrement_inventory_batch', {
+            p_branch_id: currentBranch.id,
+            p_items: physicalItems
+          });
+        }
 
         setShowFiscalize(false);
         resetFiscalizeForm();
@@ -916,7 +946,18 @@ export default function SalesScreen() {
     setLastSaleDiscount(0); setSelectedCustomerId(null); setCustomerSearch('');
   };
 
-  const skipFiscalize = () => {
+  const skipFiscalize = async () => {
+    // If skipping, we still need to decrement inventory for the items already saved in completeSale
+    if (lastSaleId && currentBranch) {
+      const { data: saleItems } = await supabase.from('sale_items').select('product_id, quantity').eq('sale_id', lastSaleId);
+      if (saleItems && saleItems.length > 0) {
+        await supabase.rpc('decrement_inventory_batch', {
+          p_branch_id: currentBranch.id,
+          p_items: saleItems
+        });
+      }
+    }
+    
     setShowFiscalize(false);
     const saleIdToShow = lastSaleId;
     resetFiscalizeForm();
@@ -1016,7 +1057,7 @@ export default function SalesScreen() {
               const itemDiscAmt = getItemDiscountAmount(item);
               const hasDiscount = itemDiscAmt > 0;
               return (
-              <View style={styles.cartItem}>
+              <View key={item.id} style={styles.cartItem}>
                 <View style={{ flex: 1, backgroundColor: 'transparent' }}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', backgroundColor: 'transparent' }}>
                     <View style={styles.cartItemInfo}>

@@ -411,8 +411,8 @@ export const EFRIS_UNITS = [
 ];
 
 export const EFRIS_PAYMENT_METHODS = [
-  { code: '101', label: 'Cash' },
-  { code: '102', label: 'Credit' },
+  { code: '101', label: 'Credit' },
+  { code: '102', label: 'Cash' },
   { code: '103', label: 'Cheque' },
   { code: '104', label: 'Mobile Money' },
   { code: '105', label: 'Visa/MasterCard' },

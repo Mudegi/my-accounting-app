@@ -11,6 +11,16 @@ export interface TrendData {
 export function aggregateTrendData(sales: any[], period: string): TrendData[] {
   const map: Record<string, number> = {};
   
+  // Pre-fill last 7 days if period is week
+  if (period === 'week') {
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const key = d.getDate() + '/' + (d.getMonth() + 1);
+      map[key] = 0;
+    }
+  }
+  
   sales.forEach(s => {
     if (!s.created_at) return;
     const date = new Date(s.created_at);
@@ -26,7 +36,12 @@ export function aggregateTrendData(sales: any[], period: string): TrendData[] {
       key = date.toLocaleString('default', { month: 'short' });
     }
     
-    map[key] = (map[key] || 0) + Number(s.total_amount);
+    // Only update if key exists in map (for week) or add if not week
+    if (period === 'week') {
+      if (map[key] !== undefined) map[key] += Number(s.total_amount);
+    } else {
+      map[key] = (map[key] || 0) + Number(s.total_amount);
+    }
   });
 
   return Object.entries(map).map(([label, value]) => ({ label, value }));
